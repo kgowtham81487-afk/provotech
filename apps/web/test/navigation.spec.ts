@@ -39,3 +39,4 @@ describe('Frontend Navigation & Routing Contract Tests', () => {
     expect(formatApiBase('https://provotech-api.onrender.com/api/v1/')).toBe('https://provotech-api.onrender.com/api/v1');
   });
 });
+
