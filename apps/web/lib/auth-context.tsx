@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiRequest } from './api';
+import { apiRequest, silentlyRefreshToken } from './api';
 
 interface User {
   id: string;
@@ -39,58 +39,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const refreshUser = async () => {
+    setIsLoading(true);
     const storedToken = typeof window !== 'undefined' ? localStorage.getItem('ees_access_token') : null;
-    if (!storedToken) {
-      // Check if there is an active HTTP-only refresh cookie to silently restore session
-      try {
-        const refreshRes = await apiRequest<{ user?: User; accessToken: string }>('/auth/refresh', {
-          method: 'POST',
-        });
-        if (refreshRes.success && refreshRes.data?.accessToken) {
-          localStorage.setItem('ees_access_token', refreshRes.data.accessToken);
-          setToken(refreshRes.data.accessToken);
-          if (refreshRes.data.user) {
-            setUser(refreshRes.data.user);
-          } else {
-            const meRes = await apiRequest<User>('/users/me', { method: 'GET' }, refreshRes.data.accessToken);
-            if (meRes.success && meRes.data) setUser(meRes.data);
-          }
-          setIsLoading(false);
-          return;
-        }
-      } catch {
-        // No active session
-      }
+    const storedRefreshToken = typeof window !== 'undefined' ? localStorage.getItem('ees_refresh_token') : null;
+
+    if (!storedToken && !storedRefreshToken) {
       setUser(null);
       setToken(null);
       setIsLoading(false);
       return;
     }
 
-    setToken(storedToken);
-    const res = await apiRequest<User>('/users/me', { method: 'GET' }, storedToken);
-    if (res.success && res.data) {
-      setUser(res.data);
-    } else {
-      // Access token may have expired (15m TTL). Try silent refresh via refresh token!
-      const refreshRes = await apiRequest<{ user?: User; accessToken: string }>('/auth/refresh', {
-        method: 'POST',
-      });
-      if (refreshRes.success && refreshRes.data?.accessToken) {
-        localStorage.setItem('ees_access_token', refreshRes.data.accessToken);
-        setToken(refreshRes.data.accessToken);
-        if (refreshRes.data.user) {
-          setUser(refreshRes.data.user);
-        } else {
-          const retryMe = await apiRequest<User>('/users/me', { method: 'GET' }, refreshRes.data.accessToken);
-          if (retryMe.success && retryMe.data) setUser(retryMe.data);
-        }
-      } else {
-        localStorage.removeItem('ees_access_token');
-        setUser(null);
-        setToken(null);
+    if (storedToken) {
+      setToken(storedToken);
+      const res = await apiRequest<User>('/users/me', { method: 'GET' }, storedToken);
+      if (res.success && res.data) {
+        setUser(res.data);
+        setIsLoading(false);
+        return;
       }
     }
+
+    // Token might be expired or invalid. Attempt silent refresh using deduplicated mechanism!
+    const newToken = await silentlyRefreshToken();
+    if (newToken) {
+      setToken(newToken);
+      const retryMe = await apiRequest<User>('/users/me', { method: 'GET' }, newToken);
+      if (retryMe.success && retryMe.data) {
+        setUser(retryMe.data);
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    // Both access token and refresh token failed
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('ees_access_token');
+      localStorage.removeItem('ees_refresh_token');
+    }
+    setUser(null);
+    setToken(null);
     setIsLoading(false);
   };
 
@@ -100,13 +88,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (input: { email: string; password: string }) => {
     setIsLoading(true);
-    const res = await apiRequest<{ user: User; accessToken: string }>('/auth/login', {
+    const res = await apiRequest<{ user: User; accessToken: string; refreshToken?: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(input),
     });
 
     if (res.success && res.data) {
-      localStorage.setItem('ees_access_token', res.data.accessToken);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ees_access_token', res.data.accessToken);
+        if (res.data.refreshToken) {
+          localStorage.setItem('ees_refresh_token', res.data.refreshToken);
+        }
+      }
       setToken(res.data.accessToken);
       setUser(res.data.user);
       setIsLoading(false);
@@ -119,13 +112,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (input: { email: string; password: string; displayName: string; username: string }) => {
     setIsLoading(true);
-    const res = await apiRequest<{ user: User; accessToken: string }>('/auth/register', {
+    const res = await apiRequest<{ user: User; accessToken: string; refreshToken?: string }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(input),
     });
 
     if (res.success && res.data) {
-      localStorage.setItem('ees_access_token', res.data.accessToken);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ees_access_token', res.data.accessToken);
+        if (res.data.refreshToken) {
+          localStorage.setItem('ees_refresh_token', res.data.refreshToken);
+        }
+      }
       setToken(res.data.accessToken);
       setUser(res.data.user);
       setIsLoading(false);
@@ -143,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     if (typeof window !== 'undefined') {
       localStorage.removeItem('ees_access_token');
+      localStorage.removeItem('ees_refresh_token');
     }
     setUser(null);
     setToken(null);

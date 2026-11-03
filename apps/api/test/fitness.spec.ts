@@ -5,6 +5,7 @@ import { NotFoundException } from '@nestjs/common';
 describe('Fitness & Wellness Module Unit Tests', () => {
   let fitnessService: FitnessService;
   let mockPrisma: any;
+  let mockFallbackEngine: any;
 
   beforeEach(() => {
     mockPrisma = {
@@ -77,7 +78,63 @@ describe('Fitness & Wellness Module Unit Tests', () => {
       }),
     };
 
-    fitnessService = new FitnessService(mockPrisma);
+    mockFallbackEngine = {
+      executeWithFallback: vi.fn().mockResolvedValue({
+        result: {
+          content: JSON.stringify({
+            items: [
+              {
+                foodName: 'Medium Idli',
+                quantity: 2,
+                unit: 'piece',
+                calories: 90,
+                proteinGrams: 3.0,
+                carbGrams: 18.0,
+                fatGrams: 0.4,
+                fibreGrams: 1.0,
+              },
+              {
+                foodName: 'Sambar',
+                quantity: 1,
+                unit: 'bowl',
+                calories: 85,
+                proteinGrams: 3.5,
+                carbGrams: 12.0,
+                fatGrams: 2.5,
+                fibreGrams: 2.0,
+              },
+              {
+                foodName: 'Coconut Chutney',
+                quantity: 2,
+                unit: 'tbsp',
+                calories: 60,
+                proteinGrams: 0.8,
+                carbGrams: 2.0,
+                fatGrams: 5.5,
+                fibreGrams: 1.0,
+              },
+            ],
+            totals: {
+              calories: 235,
+              proteinGrams: 7.3,
+              carbGrams: 32.0,
+              fatGrams: 8.4,
+              fibreGrams: 4.0,
+            },
+            assumptions: ['Assumed 1 bowl of sambar is ~150ml and 2 tbsp coconut chutney.'],
+            confidence: 'high',
+          }),
+          provider: 'GEMINI',
+          model: 'gemini-2.0-flash',
+          usage: { promptTokens: 40, completionTokens: 90, totalTokens: 130 },
+          latencyMs: 320,
+        },
+        fallbackOccurred: false,
+        attempts: [],
+      }),
+    };
+
+    fitnessService = new FitnessService(mockPrisma, mockFallbackEngine);
   });
 
   describe('1. Mifflin-St Jeor TDEE & BMR Calculations', () => {
@@ -270,6 +327,31 @@ describe('Fitness & Wellness Module Unit Tests', () => {
       ).rejects.toThrow(NotFoundException);
 
       expect(mockPrisma.foodDiaryEntry.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('5. AI-Powered Macro Estimation via Multi-Provider Cascade', () => {
+    it('should estimate nutrition macros from natural language description', async () => {
+      const res = await fitnessService.estimateMealMacros('user-123', {
+        description: '2 medium idlis with 1 bowl sambar and 2 tablespoons coconut chutney',
+        mealType: 'BREAKFAST',
+      });
+
+      expect(res.mealType).toBe('BREAKFAST');
+      expect(res.items).toHaveLength(3);
+      expect(res.items[0].foodName).toBe('Medium Idli');
+      expect(res.totals.calories).toBe(235);
+      expect(res.totals.proteinGrams).toBe(7.3);
+      expect(res.confidence).toBe('high');
+      expect(res.provider).toBe('GEMINI');
+      expect(res.fallbackOccurred).toBe(false);
+      expect(mockFallbackEngine.executeWithFallback).toHaveBeenCalledTimes(1);
+    });
+
+    it('should throw BadRequestException if food description is empty', async () => {
+      await expect(
+        fitnessService.estimateMealMacros('user-123', { description: '   ' }),
+      ).rejects.toThrow();
     });
   });
 });

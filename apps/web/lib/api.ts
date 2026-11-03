@@ -13,6 +13,58 @@ export interface ApiResponse<T = any> {
   error?: { message: string };
 }
 
+let refreshPromise: Promise<string | null> | null = null;
+
+/**
+ * Deduplicated silent refresh using refresh token from localStorage or cookies.
+ * Prevents race conditions when multiple parallel requests hit 401.
+ */
+export async function silentlyRefreshToken(): Promise<string | null> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const storedRefreshToken = typeof window !== 'undefined' ? localStorage.getItem('ees_refresh_token') : null;
+
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: storedRefreshToken || undefined }),
+        credentials: 'include',
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const newToken = json?.data?.accessToken || json?.accessToken;
+        const newRefreshToken = json?.data?.refreshToken || json?.refreshToken;
+
+        if (newToken && typeof window !== 'undefined') {
+          localStorage.setItem('ees_access_token', newToken);
+          if (newRefreshToken) {
+            localStorage.setItem('ees_refresh_token', newRefreshToken);
+          }
+          return newToken;
+        }
+      } else {
+        // Only clear credentials if refresh was explicitly rejected (e.g., 401/403/400)
+        if (typeof window !== 'undefined' && (res.status === 401 || res.status === 403 || res.status === 400)) {
+          localStorage.removeItem('ees_access_token');
+          localStorage.removeItem('ees_refresh_token');
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {},
@@ -47,35 +99,17 @@ export async function apiRequest<T = any>(
       credentials: 'include',
     });
 
-    // If 401 Unauthorized occurs on a non-auth endpoint, attempt one-time silent refresh via refresh token cookie
+    // If 401 Unauthorized occurs on a non-auth endpoint, attempt one-time deduplicated silent refresh
     if (res.status === 401 && !endpoint.includes('/auth/')) {
-      try {
-        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+      const newToken = await silentlyRefreshToken();
+      if (newToken) {
+        headers.set('Authorization', `Bearer ${newToken}`);
+        res = await fetch(`${API_BASE}${cleanEndpoint}`, {
+          ...options,
+          headers,
+          body,
           credentials: 'include',
         });
-        if (refreshRes.ok) {
-          const refreshJson = await refreshRes.json();
-          const newToken = refreshJson?.data?.accessToken || refreshJson?.accessToken;
-          if (newToken) {
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('ees_access_token', newToken);
-            }
-            headers.set('Authorization', `Bearer ${newToken}`);
-            // Retry the original request
-            res = await fetch(`${API_BASE}${cleanEndpoint}`, {
-              ...options,
-              headers,
-              body,
-              credentials: 'include',
-            });
-          }
-        } else if (typeof window !== 'undefined') {
-          localStorage.removeItem('ees_access_token');
-        }
-      } catch {
-        // Silent refresh failed, proceed to return original 401 error
       }
     }
 

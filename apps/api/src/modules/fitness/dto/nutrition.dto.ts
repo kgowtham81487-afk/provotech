@@ -30,3 +30,38 @@ export interface CreateCustomFoodDto {
   region?: string;
 }
 
+export interface EstimateMacrosDto {
+  description: string;
+  mealType?: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACKS';
+}
+
+export interface EstimatedFoodItem {
+  foodName: string;
+  quantity: number;
+  unit: string;
+  calories: number;
+  proteinGrams: number;
+  carbGrams: number;
+  fatGrams: number;
+  fibreGrams: number;
+}
+
+export interface MacroEstimationResult {
+  mealType: string;
+  description: string;
+  items: EstimatedFoodItem[];
+  totals: {
+    calories: number;
+    proteinGrams: number;
+    carbGrams: number;
+    fatGrams: number;
+    fibreGrams: number;
+  };
+  assumptions: string[];
+  confidence: 'high' | 'medium' | 'low';
+  provider: string;
+  model: string;
+  fallbackOccurred: boolean;
+}
+
+

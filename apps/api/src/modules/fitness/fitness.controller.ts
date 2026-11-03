@@ -31,6 +31,7 @@ import {
   LogFoodDiaryEntryDto,
   LogWaterDto,
   CreateCustomFoodDto,
+  EstimateMacrosDto,
 } from './dto/nutrition.dto';
 import {
   LogBodyMeasurementDto,
@@ -220,9 +221,48 @@ export class FitnessController {
     return this.fitnessService.deleteFoodDiaryEntry(userId, id);
   }
 
+  @Post('nutrition/estimate')
+  @ApiOperation({ summary: 'AI-powered nutritional macro estimation from natural language food descriptions' })
+  async estimateMacros(
+    @CurrentUser('id') userId: string,
+    @Body() body: EstimateMacrosDto,
+  ) {
+    return this.fitnessService.estimateMealMacros(userId, body);
+  }
+
+  @Get('nutrition/foods')
+  @ApiOperation({ summary: 'Search food database (alias for nutrition/search)' })
+  async listFoods(
+    @Query('q') q?: string,
+    @Query('search') search?: string,
+    @Query('category') category?: string,
+    @Query('indianOnly') indianOnly?: string,
+  ) {
+    return this.fitnessService.searchFoods({
+      search: search || q,
+      category,
+      indianOnly: indianOnly === 'true',
+    });
+  }
+
+  @Post('nutrition/foods')
+  @ApiOperation({ summary: 'Create custom food (alias for nutrition/custom-food)' })
+  async createCustomFoodAlias(
+    @CurrentUser('id') userId: string,
+    @Body() body: CreateCustomFoodDto,
+  ) {
+    return this.fitnessService.createCustomFood(userId, body);
+  }
+
   @Post('nutrition/water')
   @ApiOperation({ summary: 'Log hydration intake (amount in ml)' })
   async logWater(@CurrentUser('id') userId: string, @Body() body: LogWaterDto) {
+    return this.fitnessService.logWater(userId, body);
+  }
+
+  @Post('water')
+  @ApiOperation({ summary: 'Log hydration intake (alias for nutrition/water)' })
+  async logWaterAlias(@CurrentUser('id') userId: string, @Body() body: LogWaterDto) {
     return this.fitnessService.logWater(userId, body);
   }
 
@@ -267,9 +307,27 @@ export class FitnessController {
     return this.fitnessService.logActivity(userId, body);
   }
 
+  @Post('activities')
+  @ApiOperation({ summary: 'Log manual cardio, step count, sleep, or rest day (alias)' })
+  async logActivitiesAlias(
+    @CurrentUser('id') userId: string,
+    @Body() body: LogActivityDto,
+  ) {
+    return this.fitnessService.logActivity(userId, body);
+  }
+
   @Get('activity')
   @ApiOperation({ summary: 'List recent activity and wellness logs' })
   async listActivities(
+    @CurrentUser('id') userId: string,
+    @Query('date') date?: string,
+  ) {
+    return this.fitnessService.listActivities(userId, date);
+  }
+
+  @Get('activities')
+  @ApiOperation({ summary: 'List recent activity and wellness logs (alias)' })
+  async listActivitiesAlias(
     @CurrentUser('id') userId: string,
     @Query('date') date?: string,
   ) {

@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { FallbackEngineService } from '../ai/fallback-engine.service';
 import {
   UpdateFitnessProfileDto,
   OnboardingFitnessDto,
@@ -18,6 +19,9 @@ import {
   LogFoodDiaryEntryDto,
   LogWaterDto,
   CreateCustomFoodDto,
+  EstimateMacrosDto,
+  MacroEstimationResult,
+  EstimatedFoodItem,
 } from './dto/nutrition.dto';
 import {
   LogBodyMeasurementDto,
@@ -28,7 +32,10 @@ import {
 
 @Injectable()
 export class FitnessService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly fallbackEngine: FallbackEngineService,
+  ) {}
 
   // ==========================================
   // PROFILE & ONBOARDING (BMR/TDEE CALCULATIONS)
@@ -749,22 +756,55 @@ export class FitnessService {
     });
   }
 
-  async logFoodDiary(userId: string, input: LogFoodDiaryEntryDto) {
-    const loggedDate = input.loggedDate ? new Date(input.loggedDate) : new Date();
+  async logFoodDiary(userId: string, input: LogFoodDiaryEntryDto | any) {
+    const loggedDate = input.loggedDate || input.loggedAt ? new Date(input.loggedDate || input.loggedAt) : new Date();
+    const mealType = (input.mealType === 'SNACK' ? 'SNACKS' : input.mealType) || 'SNACKS';
+    const quantity = Number(input.servingQuantity || input.servings) || 1.0;
+
+    let foodName = input.foodName?.trim();
+    let calories = Number(input.calories);
+    let proteinGrams = Number(input.proteinGrams ?? input.proteinG);
+    let carbGrams = Number(input.carbGrams ?? input.carbsG);
+    let fatGrams = Number(input.fatGrams ?? input.fatG);
+    let fibreGrams = Number(input.fibreGrams ?? input.fiberG ?? 0);
+    let servingUnit = input.servingUnit || 'serving';
+
+    // If foodId is provided, enrich from Food table if details were not fully supplied
+    if (input.foodId) {
+      const food = await this.prisma.food.findUnique({ where: { id: input.foodId } });
+      if (food) {
+        foodName = foodName || food.name;
+        servingUnit = servingUnit || food.servingUnit || 'serving';
+        if (isNaN(calories)) calories = Math.round(food.calories * quantity);
+        if (isNaN(proteinGrams)) proteinGrams = Math.round(food.proteinGrams * quantity * 10) / 10;
+        if (isNaN(carbGrams)) carbGrams = Math.round(food.carbGrams * quantity * 10) / 10;
+        if (isNaN(fatGrams)) fatGrams = Math.round(food.fatGrams * quantity * 10) / 10;
+        if (isNaN(fibreGrams)) fibreGrams = Math.round((food.fibreGrams || 0) * quantity * 10) / 10;
+      }
+    }
+
+    if (!foodName) {
+      foodName = 'Food Item';
+    }
+    if (isNaN(calories)) calories = 0;
+    if (isNaN(proteinGrams)) proteinGrams = 0;
+    if (isNaN(carbGrams)) carbGrams = 0;
+    if (isNaN(fatGrams)) fatGrams = 0;
+    if (isNaN(fibreGrams)) fibreGrams = 0;
 
     return this.prisma.foodDiaryEntry.create({
       data: {
         userId,
         foodId: input.foodId || null,
-        mealType: input.mealType,
-        foodName: input.foodName.trim(),
-        servingQuantity: Number(input.servingQuantity) || 1.0,
-        servingUnit: input.servingUnit || 'serving',
-        calories: Math.round(Number(input.calories) * 10) / 10,
-        proteinGrams: Math.round(Number(input.proteinGrams) * 10) / 10,
-        carbGrams: Math.round(Number(input.carbGrams) * 10) / 10,
-        fatGrams: Math.round(Number(input.fatGrams) * 10) / 10,
-        fibreGrams: input.fibreGrams ? Math.round(Number(input.fibreGrams) * 10) / 10 : 0,
+        mealType,
+        foodName,
+        servingQuantity: quantity,
+        servingUnit,
+        calories: Math.round(calories * 10) / 10,
+        proteinGrams: Math.round(proteinGrams * 10) / 10,
+        carbGrams: Math.round(carbGrams * 10) / 10,
+        fatGrams: Math.round(fatGrams * 10) / 10,
+        fibreGrams: Math.round(fibreGrams * 10) / 10,
         loggedDate,
       },
       include: { food: true },
@@ -815,6 +855,7 @@ export class FitnessService {
       date: startOfDay.toISOString(),
       profile,
       meals,
+      entries,
       totals: {
         calories: totalCalories,
         protein: totalProtein,
@@ -830,6 +871,143 @@ export class FitnessService {
         fat: profile.fatGramsTarget,
         waterMl: profile.waterMlTarget,
       },
+    };
+  }
+
+  async estimateMealMacros(userId: string, input: EstimateMacrosDto): Promise<MacroEstimationResult> {
+    if (!input.description || !input.description.trim()) {
+      throw new BadRequestException('Please provide a description of the food or meal to estimate.');
+    }
+
+    const mealType = input.mealType || 'SNACKS';
+
+    const systemPrompt = `You are a certified clinical sports nutritionist and expert in Indian (Tamil Nadu, South Indian, North Indian) and international nutritional science.
+Analyze the user's unstructured food text and calculate estimated macro & calorie values.
+
+CRITICAL JSON OUTPUT RULES:
+1. Output ONLY a valid JSON object matching the exact structure below.
+2. Do NOT include markdown text, conversational greetings, or notes outside the JSON.
+3. Portion accuracy for common Indian items:
+   - 1 medium Idli (~50g): 45 kcal, 1.5g protein, 9g carbs, 0.2g fat, 0.5g fibre
+   - 1 bowl Sambar (~150ml): 85 kcal, 3.5g protein, 12g carbs, 2.5g fat, 2g fibre
+   - 2 tbsp Coconut Chutney (~30g): 60 kcal, 0.8g protein, 2g carbs, 5.5g fat, 1g fibre
+   - 1 plain Dosa (~80g): 140 kcal, 3g protein, 22g carbs, 4.5g fat, 1g fibre
+   - 1 Masala Dosa: 250 kcal, 4.5g protein, 35g carbs, 10g fat, 2.5g fibre
+   - 1 bowl White Rice cooked (~150g): 195 kcal, 4g protein, 43g carbs, 0.5g fat, 0.5g fibre
+   - 1 bowl Dal Tadka (~150g): 160 kcal, 9g protein, 20g carbs, 5g fat, 4g fibre
+   - 1 Roti / Phulka (~35g): 85 kcal, 3g protein, 17g carbs, 1g fat, 2g fibre
+   - 100g Chicken breast cooked: 165 kcal, 31g protein, 0g carbs, 3.6g fat, 0g fibre
+   - 100g Paneer: 275 kcal, 18g protein, 3g carbs, 22g fat, 0g fibre
+   - 1 Boiled Egg: 78 kcal, 6.3g protein, 0.6g carbs, 5.3g fat, 0g fibre
+
+REQUIRED JSON STRUCTURE:
+{
+  "items": [
+    {
+      "foodName": "Food Name",
+      "quantity": 1,
+      "unit": "piece | bowl | cup | tbsp | grams | serving",
+      "calories": 100,
+      "proteinGrams": 5.0,
+      "carbGrams": 15.0,
+      "fatGrams": 2.0,
+      "fibreGrams": 1.0
+    }
+  ],
+  "totals": {
+    "calories": 100,
+    "proteinGrams": 5.0,
+    "carbGrams": 15.0,
+    "fatGrams": 2.0,
+    "fibreGrams": 1.0
+  },
+  "assumptions": [
+    "Brief explanation of portion or preparation assumptions"
+  ],
+  "confidence": "high" | "medium" | "low"
+}`;
+
+    const userPrompt = `Meal Type: ${mealType}
+Food eaten: "${input.description.trim()}"`;
+
+    const aiRes = await this.fallbackEngine.executeWithFallback(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      {
+        temperature: 0.2,
+        maxTokens: 1000,
+      },
+    );
+
+    let parsed: any;
+    try {
+      let rawText = (aiRes.result.content || '').trim();
+      if (rawText.startsWith('```')) {
+        rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      }
+      parsed = JSON.parse(rawText);
+    } catch {
+      parsed = {
+        items: [
+          {
+            foodName: input.description.slice(0, 50),
+            quantity: 1,
+            unit: 'serving',
+            calories: 350,
+            proteinGrams: 12,
+            carbGrams: 45,
+            fatGrams: 10,
+            fibreGrams: 3,
+          },
+        ],
+        totals: {
+          calories: 350,
+          proteinGrams: 12,
+          carbGrams: 45,
+          fatGrams: 10,
+          fibreGrams: 3,
+        },
+        assumptions: ['Generated approximate estimates based on standard meal serving.'],
+        confidence: 'low',
+      };
+    }
+
+    const items: EstimatedFoodItem[] = Array.isArray(parsed.items)
+      ? parsed.items.map((it: any) => ({
+          foodName: String(it.foodName || 'Food Item').trim(),
+          quantity: Number(it.quantity) || 1,
+          unit: String(it.unit || 'serving').trim(),
+          calories: Math.max(0, Math.round(Number(it.calories) || 0)),
+          proteinGrams: Math.max(0, Math.round((Number(it.proteinGrams) || 0) * 10) / 10),
+          carbGrams: Math.max(0, Math.round((Number(it.carbGrams) || 0) * 10) / 10),
+          fatGrams: Math.max(0, Math.round((Number(it.fatGrams) || 0) * 10) / 10),
+          fibreGrams: Math.max(0, Math.round((Number(it.fibreGrams) || 0) * 10) / 10),
+        }))
+      : [];
+
+    const computedTotals = items.reduce(
+      (acc, item) => ({
+        calories: acc.calories + item.calories,
+        proteinGrams: Math.round((acc.proteinGrams + item.proteinGrams) * 10) / 10,
+        carbGrams: Math.round((acc.carbGrams + item.carbGrams) * 10) / 10,
+        fatGrams: Math.round((acc.fatGrams + item.fatGrams) * 10) / 10,
+        fibreGrams: Math.round((acc.fibreGrams + item.fibreGrams) * 10) / 10,
+      }),
+      { calories: 0, proteinGrams: 0, carbGrams: 0, fatGrams: 0, fibreGrams: 0 },
+    );
+
+    return {
+      mealType,
+      description: input.description.trim(),
+      items,
+      totals: items.length > 0 ? computedTotals : (parsed.totals || computedTotals),
+      assumptions: Array.isArray(parsed.assumptions) ? parsed.assumptions : [],
+      confidence: ['high', 'medium', 'low'].includes(parsed.confidence) ? parsed.confidence : 'medium',
+      provider: aiRes.result.provider,
+      model: aiRes.result.model,
+      fallbackOccurred: aiRes.fallbackOccurred,
     };
   }
 
