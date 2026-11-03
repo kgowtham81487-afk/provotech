@@ -16,15 +16,33 @@ import {
   ExternalLink,
   ShieldAlert,
   Info,
+  CheckCircle,
+  HelpCircle,
+  Sparkles,
+  Flame,
+  XCircle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
+export type ProviderHealthState =
+  | 'ACTIVE'
+  | 'HEALTHY'
+  | 'DEGRADED'
+  | 'COOLDOWN'
+  | 'INVALID_CONFIGURATION'
+  | 'INSUFFICIENT_BALANCE'
+  | 'AWAITING_API_KEY'
+  | 'DISABLED';
+
 interface DiscoveredModel {
   id: string;
-  name: string;
+  displayName: string;
   description?: string;
   contextWindow?: number;
+  outputTokenLimit?: number;
+  supportsGenerate: boolean;
   isRecommended?: boolean;
+  isVerified?: boolean;
 }
 
 interface ProviderStatus {
@@ -36,6 +54,7 @@ interface ProviderStatus {
   model: string;
   isConfigured: boolean;
   isHealthy: boolean;
+  healthState: ProviderHealthState;
   inCooldown: boolean;
   cooldownUntil: string | null;
   totalRequests: number;
@@ -45,6 +64,8 @@ interface ProviderStatus {
   lastFailureAt: string | null;
   lastErrorMessage: string | null;
   errorCategory?: string | null;
+  effectiveTokenLimit?: number;
+  isModelVerified?: boolean;
   discoveredModels?: DiscoveredModel[];
 }
 
@@ -68,7 +89,9 @@ export default function AdminAiDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
+  const [verifyingProvider, setVerifyingProvider] = useState<string | null>(null);
   const [discoveringProvider, setDiscoveringProvider] = useState<string | null>(null);
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
 
   // Edit model modal
@@ -153,7 +176,10 @@ export default function AdminAiDashboard() {
       setFeedback(null);
       const res = await api.post(`/admin/ai/test/${provider}`, {
         model: customModel,
-        prompt: 'Reply with exactly: EES AI connection successful.',
+        prompt:
+          provider === 'GEMINI'
+            ? 'Reply with exactly: GEMINI_CONNECTION_SUCCESSFUL'
+            : 'Reply with exactly: EES AI connection successful.',
       });
 
       const data = res.data;
@@ -184,6 +210,85 @@ export default function AdminAiDashboard() {
       setFeedback({ type: 'error', message: err?.message || 'Test execution failed' });
     } finally {
       setTestingProvider(null);
+    }
+  };
+
+  const handleVerifyActualGeneration = async (provider: string, modelToVerify: string) => {
+    try {
+      setVerifyingProvider(provider);
+      setFeedback(null);
+      const res = await api.post(`/admin/ai/verify-model/${provider}`, {
+        model: modelToVerify,
+      });
+
+      const data = res.data;
+      setTestResult({
+        provider,
+        model: data?.model || modelToVerify,
+        success: !!data?.success,
+        httpStatus: data?.httpStatus,
+        latencyMs: data?.latencyMs || 0,
+        errorCategory: data?.errorCategory,
+        responseContent: data?.responseContent,
+        message: data?.message,
+      });
+
+      if (data?.success) {
+        setFeedback({
+          type: 'success',
+          message: `✓ Actual generation verified for ${provider} with '${modelToVerify}' in ${data.latencyMs}ms. Model is now VERIFIED!`,
+        });
+      } else {
+        setFeedback({
+          type: 'error',
+          message: `✗ Generation test failed for '${modelToVerify}' [${data?.errorCategory || 'ERROR'}]: ${data?.message || 'Failed'}`,
+        });
+      }
+      fetchStatus();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Model verification execution failed' });
+    } finally {
+      setVerifyingProvider(null);
+    }
+  };
+
+  const handleResetCooldown = async (provider: string) => {
+    try {
+      setActionInProgress(`reset-cooldown-${provider}`);
+      await api.post(`/admin/ai/reset-cooldown/${provider}`, {});
+      setFeedback({
+        type: 'success',
+        message: `Cooldown reset for ${provider}. Provider is now immediately eligible for requests.`,
+      });
+      fetchStatus();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Failed to reset cooldown' });
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleRetryProvider = async (provider: string) => {
+    try {
+      setActionInProgress(`retry-${provider}`);
+      const res = await api.post(`/admin/ai/retry/${provider}`, {});
+      const data = res.data;
+      if (data?.success) {
+        setFeedback({
+          type: 'success',
+          message: `✓ ${provider} recovered successfully in ${data.latencyMs}ms. Health restored!`,
+        });
+      } else {
+        setFeedback({
+          type: 'error',
+          message: `✗ Retry attempt failed for ${provider}: ${data?.message || 'Still failing'}`,
+        });
+      }
+      fetchStatus();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Retry execution failed' });
+    } finally {
+      setActionInProgress(null);
     }
   };
 
@@ -262,6 +367,65 @@ export default function AdminAiDashboard() {
     return mins > 0 ? `${mins}m ${remSecs}s` : `${remSecs}s`;
   };
 
+  const renderHealthBadge = (p: ProviderStatus) => {
+    const cooldownRemaining = getCooldownRemaining(p.cooldownUntil);
+
+    if (p.healthState === 'DISABLED' || !p.isEnabled) {
+      return (
+        <span className="text-slate-400 font-semibold px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] flex items-center gap-1">
+          <XCircle className="w-3.5 h-3.5" /> DISABLED
+        </span>
+      );
+    }
+    if (p.healthState === 'AWAITING_API_KEY' || !p.isConfigured) {
+      return (
+        <span className="text-rose-400 font-semibold px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[11px] flex items-center gap-1">
+          <AlertTriangle className="w-3.5 h-3.5" /> AWAITING_API_KEY
+        </span>
+      );
+    }
+    if (p.healthState === 'COOLDOWN' || cooldownRemaining) {
+      return (
+        <span className="text-amber-400 font-semibold px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] flex items-center gap-1">
+          <Clock className="w-3.5 h-3.5" /> COOLDOWN ({cooldownRemaining || 'Expiring'})
+        </span>
+      );
+    }
+    if (p.healthState === 'INSUFFICIENT_BALANCE') {
+      return (
+        <span className="text-amber-400 font-semibold px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] flex items-center gap-1">
+          <ShieldAlert className="w-3.5 h-3.5" /> INSUFFICIENT_BALANCE
+        </span>
+      );
+    }
+    if (p.healthState === 'INVALID_CONFIGURATION') {
+      return (
+        <span className="text-purple-400 font-semibold px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[11px] flex items-center gap-1">
+          <Info className="w-3.5 h-3.5" /> INVALID_CONFIGURATION
+        </span>
+      );
+    }
+    if (p.healthState === 'DEGRADED') {
+      return (
+        <span className="text-rose-400 font-semibold px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[11px] flex items-center gap-1">
+          <AlertTriangle className="w-3.5 h-3.5" /> DEGRADED
+        </span>
+      );
+    }
+    if (p.healthState === 'HEALTHY') {
+      return (
+        <span className="text-emerald-400 font-semibold px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] flex items-center gap-1">
+          <CheckCircle2 className="w-3.5 h-3.5" /> HEALTHY
+        </span>
+      );
+    }
+    return (
+      <span className="text-cyan-400 font-semibold px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-[11px] flex items-center gap-1">
+        <Activity className="w-3.5 h-3.5" /> ACTIVE
+      </span>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Title & Controls */}
@@ -271,7 +435,7 @@ export default function AdminAiDashboard() {
             <span>🤖 AI Cluster & Provider Controls</span>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Supervise multi-provider routing (Gemini, DeepSeek, Groq), health tracking, model discovery, and automatic fallback sequences.
+            Supervise multi-provider routing (Gemini, DeepSeek, Groq), health tracking, model discovery, token limits, and automatic fallback sequences.
           </p>
         </div>
 
@@ -380,13 +544,15 @@ export default function AdminAiDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {providers.map((p) => {
             const isTesting = testingProvider === p.provider;
+            const isVerifying = verifyingProvider === p.provider;
             const isDiscovering = discoveringProvider === p.provider;
+            const isResetting = actionInProgress === `reset-cooldown-${p.provider}`;
+            const isRetrying = actionInProgress === `retry-${p.provider}`;
             const cooldownRemaining = getCooldownRemaining(p.cooldownUntil);
 
-            // Determine status badge colors
-            const is402 = p.errorCategory === 'INSUFFICIENT_BALANCE' || p.lastErrorMessage?.includes('[INSUFFICIENT_BALANCE]');
-            const is404 = p.errorCategory === 'MODEL_NOT_FOUND' || p.lastErrorMessage?.includes('[MODEL_NOT_FOUND]');
-            const is401 = p.errorCategory === 'AUTHENTICATION_FAILURE' || p.lastErrorMessage?.includes('[AUTHENTICATION_FAILURE]');
+            const is402 = p.healthState === 'INSUFFICIENT_BALANCE' || p.lastErrorMessage?.includes('[INSUFFICIENT_BALANCE]');
+            const is404 = p.healthState === 'INVALID_CONFIGURATION' || p.lastErrorMessage?.includes('[MODEL_NOT_FOUND]') || p.lastErrorMessage?.includes('[INVALID_CONFIGURATION]');
+            const is401 = p.healthState === 'AWAITING_API_KEY' || p.lastErrorMessage?.includes('[AUTHENTICATION_FAILURE]');
 
             return (
               <div
@@ -397,7 +563,7 @@ export default function AdminAiDashboard() {
                     : 'border-slate-800 hover:border-slate-700'
                 }`}
               >
-                {/* Badges Header */}
+                {/* Header & Badges */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
@@ -425,13 +591,27 @@ export default function AdminAiDashboard() {
                     </div>
                   </div>
 
-                  <h3 className="text-lg font-black text-white">{p.name}</h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-black text-white">{p.name}</h3>
+                    {renderHealthBadge(p)}
+                  </div>
 
-                  {/* Model & Key config status */}
-                  <div className="mt-2 space-y-1.5 text-xs">
+                  {/* Model & Config details */}
+                  <div className="mt-3 space-y-2 text-xs">
                     <div className="flex items-center justify-between text-slate-400">
-                      <span>Configured Model:</span>
-                      <span className="font-mono text-indigo-300 font-semibold">{p.model}</span>
+                      <span>Selected Model:</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-indigo-300 font-semibold">{p.model}</span>
+                        {p.isModelVerified ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-sans font-medium" title="Verified via actual generation">
+                            ✓ Verified
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-sans font-medium" title="Not yet verified via generation test">
+                            Unverified
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between text-slate-400">
@@ -450,36 +630,14 @@ export default function AdminAiDashboard() {
                     </div>
 
                     <div className="flex items-center justify-between text-slate-400">
-                      <span>Health State:</span>
-                      <span>
-                        {cooldownRemaining ? (
-                          <span className="text-amber-400 font-medium px-2 py-0.5 rounded bg-amber-400/10 border border-amber-400/20">
-                            Cooldown ({cooldownRemaining})
-                          </span>
-                        ) : is402 ? (
-                          <span className="text-amber-400 font-semibold px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
-                            Insufficient Balance (402)
-                          </span>
-                        ) : is404 ? (
-                          <span className="text-purple-400 font-semibold px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">
-                            Model Not Found (404)
-                          </span>
-                        ) : is401 ? (
-                          <span className="text-rose-400 font-semibold px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">
-                            Auth Error (401)
-                          </span>
-                        ) : p.isHealthy ? (
-                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3" /> Healthy
-                          </span>
-                        ) : (
-                          <span className="text-rose-400 font-medium">Degraded</span>
-                        )}
+                      <span>Token Output Budget:</span>
+                      <span className="font-mono text-cyan-300">
+                        {p.effectiveTokenLimit ? `${p.effectiveTokenLimit} max tokens` : 'Default'}
                       </span>
                     </div>
 
                     {/* Timestamps */}
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-800/60">
                       <span>Last Success:</span>
                       <span className="font-mono text-slate-400">{formatTimestamp(p.lastSuccessAt)}</span>
                     </div>
@@ -487,9 +645,15 @@ export default function AdminAiDashboard() {
                       <span>Last Failure:</span>
                       <span className="font-mono text-slate-400">{formatTimestamp(p.lastFailureAt)}</span>
                     </div>
+                    {p.cooldownUntil && (
+                      <div className="flex items-center justify-between text-[11px] text-amber-400">
+                        <span>Cooldown Expiry:</span>
+                        <span className="font-mono">{formatTimestamp(p.cooldownUntil)}</span>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Telemetry bar */}
+                  {/* Telemetry counters */}
                   <div className="mt-3 pt-3 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-center text-xs">
                     <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800">
                       <div className="text-[10px] text-slate-500 uppercase font-semibold">Successful</div>
@@ -506,9 +670,9 @@ export default function AdminAiDashboard() {
                     <div className="mt-3 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300">
                       <div className="font-bold flex items-center gap-1.5 mb-1 text-amber-400">
                         <AlertTriangle className="w-3.5 h-3.5" />
-                        <span>Action Required: Account Balance Depleted</span>
+                        <span>Action Required: DeepSeek Account Balance Depleted</span>
                       </div>
-                      <p>DeepSeek requires account credits. Please top up API balance in the DeepSeek platform console. Automatic fallback will safely bypass this provider until re-tested.</p>
+                      <p>DeepSeek account has 0 available credits. Top up API credits on the DeepSeek console. The fallback engine automatically skips DeepSeek until an admin re-tests.</p>
                     </div>
                   )}
 
@@ -516,9 +680,9 @@ export default function AdminAiDashboard() {
                     <div className="mt-3 p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-300">
                       <div className="font-bold flex items-center gap-1.5 mb-1 text-purple-400">
                         <Info className="w-3.5 h-3.5" />
-                        <span>Action Required: Model Unsupported</span>
+                        <span>Action Required: Model Configuration Mismatch</span>
                       </div>
-                      <p>The configured model ID is unsupported or deprecated. Use &quot;Discover Models&quot; below to select a verified active model.</p>
+                      <p>The selected model returned 404 or unsupported token settings. Click &quot;Select Model&quot; to pick a verified model like {p.provider === 'GEMINI' ? 'gemini-2.0-flash' : 'llama-3.1-8b-instant'}.</p>
                     </div>
                   )}
 
@@ -528,7 +692,7 @@ export default function AdminAiDashboard() {
                         <ShieldAlert className="w-3.5 h-3.5" />
                         <span>Action Required: Invalid Authentication</span>
                       </div>
-                      <p>The API key configured on Render is invalid. Please update the API key environment variable.</p>
+                      <p>The API key configured on Render is invalid or missing. Please update the API key environment variable.</p>
                     </div>
                   )}
 
@@ -540,16 +704,16 @@ export default function AdminAiDashboard() {
                   )}
                 </div>
 
-                {/* Actions */}
+                {/* Actions Grid */}
                 <div className="mt-5 pt-3 border-t border-slate-800 space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <button
-                      onClick={() => handleTestConnection(p.provider)}
-                      disabled={isTesting}
+                      onClick={() => handleVerifyActualGeneration(p.provider, p.model)}
+                      disabled={isVerifying}
                       className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition disabled:opacity-50"
                     >
-                      <Play className={`w-3 h-3 ${isTesting ? 'animate-pulse' : ''}`} />
-                      <span>{isTesting ? 'Testing...' : 'Test Connection'}</span>
+                      <Sparkles className={`w-3 h-3 ${isVerifying ? 'animate-spin' : ''}`} />
+                      <span>{isVerifying ? 'Testing...' : 'Verify Model'}</span>
                     </button>
 
                     <button
@@ -562,18 +726,49 @@ export default function AdminAiDashboard() {
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-between pt-1">
+                  <div className="grid grid-cols-3 gap-2 pt-1 text-[11px]">
                     <button
                       onClick={() => {
                         setEditModalProvider(p);
                         setEditModelName(p.model);
                       }}
-                      className="text-xs text-cyan-400 hover:underline flex items-center gap-1"
+                      className="py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-cyan-300 font-medium transition flex items-center justify-center gap-1"
                     >
                       <Sliders className="w-3 h-3" />
-                      <span>Change Model</span>
+                      <span>Select Model</span>
                     </button>
 
+                    <button
+                      onClick={() => handleRetryProvider(p.provider)}
+                      disabled={isRetrying}
+                      className="py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 font-medium transition flex items-center justify-center gap-1 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isRetrying ? 'animate-spin' : ''}`} />
+                      <span>Retry</span>
+                    </button>
+
+                    {p.inCooldown || p.cooldownUntil ? (
+                      <button
+                        onClick={() => handleResetCooldown(p.provider)}
+                        disabled={isResetting}
+                        className="py-1.5 px-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-medium transition flex items-center justify-center gap-1 disabled:opacity-50"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Reset CD</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleTestConnection(p.provider)}
+                        disabled={isTesting}
+                        className="py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-medium transition flex items-center justify-center gap-1 disabled:opacity-50"
+                      >
+                        <Play className="w-3 h-3 text-emerald-400" />
+                        <span>Ping API</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
                     {!p.isPreferred && p.isEnabled && (
                       <button
                         onClick={() => handleSetPreferred(p.provider)}
@@ -585,9 +780,9 @@ export default function AdminAiDashboard() {
 
                     <button
                       onClick={() => handleToggleProvider(p.provider, p.isEnabled)}
-                      className={`text-xs hover:underline ${p.isEnabled ? 'text-rose-400' : 'text-emerald-400'}`}
+                      className={`text-xs ml-auto hover:underline ${p.isEnabled ? 'text-rose-400' : 'text-emerald-400'}`}
                     >
-                      {p.isEnabled ? 'Disable' : 'Enable'}
+                      {p.isEnabled ? 'Disable Provider' : 'Enable Provider'}
                     </button>
                   </div>
                 </div>
@@ -597,12 +792,12 @@ export default function AdminAiDashboard() {
         </div>
       </div>
 
-      {/* Model Configuration Modal */}
+      {/* Model Selection & Configuration Modal */}
       {editModalProvider && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
           <div className="max-w-lg w-full bg-[#0F172A] border border-slate-800 rounded-2xl p-6 shadow-2xl">
             <h3 className="text-base font-bold text-white mb-1">
-              Configure {editModalProvider.name} Parameters
+              Select & Configure {editModalProvider.name} Model
             </h3>
             <p className="text-xs text-slate-400 mb-4">
               Select or specify the model identifier to be dispatched for {editModalProvider.name}.
@@ -613,7 +808,7 @@ export default function AdminAiDashboard() {
               {editModalProvider.discoveredModels && editModalProvider.discoveredModels.length > 0 && (
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1.5">
-                    Discovered Active Models ({editModalProvider.discoveredModels.length})
+                    Available Discovered Models ({editModalProvider.discoveredModels.length})
                   </label>
                   <select
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-indigo-500 font-mono text-xs"
@@ -622,7 +817,7 @@ export default function AdminAiDashboard() {
                   >
                     {editModalProvider.discoveredModels.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.id} {m.isRecommended ? '★ (Recommended)' : ''} {m.contextWindow ? `[${m.contextWindow.toLocaleString()} ctx]` : ''}
+                        {m.id} {m.isRecommended ? '★ (Recommended)' : ''} {m.outputTokenLimit ? `[${m.outputTokenLimit} out tokens]` : ''}
                       </option>
                     ))}
                   </select>
@@ -630,7 +825,7 @@ export default function AdminAiDashboard() {
               )}
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Model Identifier (Custom or Selected)</label>
+                <label className="block text-slate-300 font-semibold mb-1">Model Identifier (Selected or Custom)</label>
                 <input
                   type="text"
                   value={editModelName}
@@ -639,19 +834,19 @@ export default function AdminAiDashboard() {
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-indigo-500 font-mono text-xs"
                 />
                 <div className="text-[10px] text-slate-500 mt-1">
-                  Verified defaults: Gemini (`gemini-2.0-flash`), DeepSeek (`deepseek-chat`), Groq (`llama-3.1-8b-instant`).
+                  Verified candidate models: Gemini (`gemini-2.0-flash`, `gemini-1.5-flash`), DeepSeek (`deepseek-chat`), Groq (`llama-3.1-8b-instant`, `llama-3.3-70b-versatile [512 limit]`).
                 </div>
               </div>
 
               <div className="flex items-center justify-between pt-3">
                 <button
                   type="button"
-                  disabled={isTestingModel(editModalProvider.provider)}
-                  onClick={() => handleTestConnection(editModalProvider.provider, editModelName)}
+                  disabled={verifyingProvider === editModalProvider.provider}
+                  onClick={() => handleVerifyActualGeneration(editModalProvider.provider, editModelName)}
                   className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-400 font-medium transition flex items-center gap-1.5 text-xs"
                 >
-                  <Play className="w-3 h-3" />
-                  <span>Test This Model</span>
+                  <Sparkles className="w-3 h-3" />
+                  <span>Test Actual Generation</span>
                 </button>
 
                 <div className="flex items-center gap-2">
@@ -668,7 +863,7 @@ export default function AdminAiDashboard() {
                     onClick={handleSaveModel}
                     className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition disabled:opacity-50 text-xs"
                   >
-                    {savingConfig ? 'Saving...' : 'Save Configuration'}
+                    {savingConfig ? 'Saving...' : 'Save & Select'}
                   </button>
                 </div>
               </div>
@@ -683,7 +878,7 @@ export default function AdminAiDashboard() {
           <div className="max-w-lg w-full bg-[#0F172A] border border-slate-800 rounded-2xl p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <span>Test Execution Results</span>
+                <span>Generation Test Results</span>
                 <span
                   className={`text-xs px-2 py-0.5 rounded font-mono ${
                     testResult.success
@@ -724,7 +919,7 @@ export default function AdminAiDashboard() {
 
               {testResult.responseContent && (
                 <div>
-                  <span className="text-slate-400 text-[11px] font-semibold block mb-1">Model Response:</span>
+                  <span className="text-slate-400 text-[11px] font-semibold block mb-1">Live Model Response:</span>
                   <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl font-mono text-emerald-300 text-xs">
                     {testResult.responseContent}
                   </div>
@@ -733,7 +928,7 @@ export default function AdminAiDashboard() {
 
               {testResult.message && !testResult.success && (
                 <div>
-                  <span className="text-slate-400 text-[11px] font-semibold block mb-1">Provider Error:</span>
+                  <span className="text-slate-400 text-[11px] font-semibold block mb-1">Provider Error Detail:</span>
                   <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl font-mono text-rose-300 text-xs">
                     {testResult.message}
                   </div>
@@ -755,8 +950,4 @@ export default function AdminAiDashboard() {
       )}
     </div>
   );
-
-  function isTestingModel(provider: string) {
-    return testingProvider === provider;
-  }
 }

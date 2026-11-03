@@ -32,6 +32,10 @@ export class DeepSeekProvider implements AiProvider {
     return process.env.DEEPSEEK_MODEL || 'deepseek-chat';
   }
 
+  getEffectiveTokenLimit(_model: string, requestedTokens?: number): number {
+    return Math.min(requestedTokens ?? 2048, 4096);
+  }
+
   async generate(messages: AiMessageInput[], options?: AiGenerateOptions): Promise<AiGenerateResult> {
     const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
     if (!apiKey) {
@@ -46,7 +50,7 @@ export class DeepSeekProvider implements AiProvider {
       model,
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 2048,
+      max_tokens: this.getEffectiveTokenLimit(model, options?.maxTokens),
     };
 
     const startTime = Date.now();
@@ -190,8 +194,10 @@ export class DeepSeekProvider implements AiProvider {
               displayName: m.id,
               description: `DeepSeek official production model (${m.owned_by || 'deepseek'})`,
               contextWindow: 65536,
+              outputTokenLimit: 4096,
               supportsGenerate: true,
               isRecommended: m.id === 'deepseek-chat',
+              isVerified: true,
             }));
           }
         }
@@ -207,19 +213,21 @@ export class DeepSeekProvider implements AiProvider {
         displayName: 'DeepSeek-V3 (deepseek-chat) [Recommended]',
         description: 'General conversational chat, code generation, and function calling (64k context)',
         contextWindow: 65536,
+        outputTokenLimit: 4096,
         supportsGenerate: true,
         isRecommended: true,
+        isVerified: true,
       },
       {
         id: 'deepseek-reasoner',
         displayName: 'DeepSeek-R1 (deepseek-reasoner)',
         description: 'Chain-of-thought advanced reasoning model with deep mathematical analysis',
         contextWindow: 65536,
+        outputTokenLimit: 4096,
         supportsGenerate: true,
         isRecommended: false,
+        isVerified: true,
       },
     ];
   }
 }
-
-

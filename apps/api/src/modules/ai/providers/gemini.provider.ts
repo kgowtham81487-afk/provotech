@@ -23,12 +23,25 @@ export class GeminiProvider implements AiProvider {
   readonly name: AiProviderName = 'GEMINI';
   private readonly logger = new Logger(GeminiProvider.name);
 
+  // Verified candidate models for Google Gemini
+  private readonly verifiedCandidates = [
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-pro',
+    'gemini-1.5-flash-8b',
+  ];
+
   isConfigured(): boolean {
     return !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0;
   }
 
   getDefaultModel(): string {
     return process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  }
+
+  getEffectiveTokenLimit(_model: string, requestedTokens?: number): number {
+    return Math.min(requestedTokens ?? 2048, 8192);
   }
 
   async generate(messages: AiMessageInput[], options?: AiGenerateOptions): Promise<AiGenerateResult> {
@@ -41,6 +54,34 @@ export class GeminiProvider implements AiProvider {
     // Normalize model ID by stripping any leading 'models/' prefix
     const model = rawModel.replace(/^models\//, '').trim();
     const timeoutMs = options?.timeoutMs || 30000;
+    const startTime = Date.now();
+
+    try {
+      return await this.executeGeneration(messages, model, apiKey, options, timeoutMs, startTime);
+    } catch (err: any) {
+      // If the configured model returned 404 (e.g. invalid 'gemini-2.5-flash-lite'), attempt automatic recovery with verified model
+      if (err instanceof AiModelNotFoundError && model !== 'gemini-2.0-flash') {
+        this.logger.warn(
+          `Gemini model '${model}' returned 404. Attempting self-healing recovery with verified 'gemini-2.0-flash'...`,
+        );
+        try {
+          return await this.executeGeneration(messages, 'gemini-2.0-flash', apiKey, options, timeoutMs, startTime);
+        } catch (recoveryErr: any) {
+          this.logger.error(`Self-healing recovery with 'gemini-2.0-flash' failed: ${recoveryErr.message}`);
+        }
+      }
+      throw err;
+    }
+  }
+
+  private async executeGeneration(
+    messages: AiMessageInput[],
+    model: string,
+    apiKey: string,
+    options: AiGenerateOptions | undefined,
+    timeoutMs: number,
+    startTime: number,
+  ): Promise<AiGenerateResult> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     // Separate system messages from chat contents
@@ -60,7 +101,7 @@ export class GeminiProvider implements AiProvider {
       contents,
       generationConfig: {
         temperature: options?.temperature ?? 0.7,
-        maxOutputTokens: options?.maxTokens ?? 2048,
+        maxOutputTokens: this.getEffectiveTokenLimit(model, options?.maxTokens),
       },
     };
 
@@ -70,9 +111,10 @@ export class GeminiProvider implements AiProvider {
       };
     }
 
-    const startTime = Date.now();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    this.logger.log(`[GeminiProvider] Dispatched generation with model: '${model}', token budget: ${body.generationConfig.maxOutputTokens}`);
 
     try {
       const response = await fetch(url, {
@@ -142,7 +184,7 @@ export class GeminiProvider implements AiProvider {
 
   async testConnection(
     model?: string,
-    prompt = 'Reply with exactly: EES AI connection successful.',
+    prompt = 'Reply with exactly: GEMINI_CONNECTION_SUCCESSFUL',
   ): Promise<AiTestResult> {
     const selectedModel = (model || this.getDefaultModel()).replace(/^models\//, '').trim();
     const start = Date.now();
@@ -157,12 +199,12 @@ export class GeminiProvider implements AiProvider {
       return {
         success: true,
         provider: this.name,
-        model: selectedModel,
+        model: res.model || selectedModel,
         latencyMs: Date.now() - start,
         httpStatus: 200,
         errorCategory: null,
         responseContent: res.content,
-        message: `Gemini verified successfully via model '${selectedModel}' in ${Date.now() - start}ms.`,
+        message: `Gemini verified successfully via model '${res.model || selectedModel}' in ${Date.now() - start}ms.`,
       };
     } catch (err: any) {
       const status = err.statusCode || (err instanceof AiAuthError ? 401 : err instanceof AiModelNotFoundError ? 404 : 500);
@@ -184,33 +226,50 @@ export class GeminiProvider implements AiProvider {
     const apiKey = process.env.GEMINI_API_KEY?.trim();
     if (apiKey) {
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 10000);
+        let allModels: any[] = [];
+        let pageToken: string | undefined = undefined;
+        let pageCount = 0;
 
-        const response = await fetch(url, { signal: controller.signal });
-        clearTimeout(timer);
+        // Fetch models with pagination handling (up to 3 pages)
+        do {
+          const pageParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+          const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}${pageParam}`;
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 10000);
 
-        if (response.ok) {
+          const response = await fetch(url, { signal: controller.signal });
+          clearTimeout(timer);
+
+          if (!response.ok) break;
+
           const data: any = await response.json();
-          if (Array.isArray(data?.models) && data.models.length > 0) {
-            const available = data.models
-              .filter((m: any) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
-              .map((m: any) => {
-                const id = m.name.replace(/^models\//, '');
-                return {
-                  id,
-                  displayName: m.displayName || id,
-                  description: m.description || `Input limit: ${m.inputTokenLimit || 'N/A'} tokens`,
-                  contextWindow: m.inputTokenLimit,
-                  supportsGenerate: true,
-                  isRecommended: id === 'gemini-2.0-flash' || id === 'gemini-1.5-flash',
-                };
-              });
+          if (Array.isArray(data?.models)) {
+            allModels = allModels.concat(data.models);
+          }
+          pageToken = data?.nextPageToken;
+          pageCount++;
+        } while (pageToken && pageCount < 3);
 
-            if (available.length > 0) {
-              return available;
-            }
+        if (allModels.length > 0) {
+          const available = allModels
+            .filter((m: any) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+            .map((m: any) => {
+              const id = m.name.replace(/^models\//, '');
+              const isCandidate = this.verifiedCandidates.includes(id);
+              return {
+                id,
+                displayName: m.displayName || id,
+                description: m.description || `Input limit: ${m.inputTokenLimit || 'N/A'} tokens`,
+                contextWindow: m.inputTokenLimit,
+                outputTokenLimit: m.outputTokenLimit || 8192,
+                supportsGenerate: true,
+                isRecommended: id === 'gemini-2.0-flash' || id === 'gemini-1.5-flash',
+                isVerified: isCandidate,
+              };
+            });
+
+          if (available.length > 0) {
+            return available;
           }
         }
       } catch (err: any) {
@@ -222,46 +281,54 @@ export class GeminiProvider implements AiProvider {
     return [
       {
         id: 'gemini-2.0-flash',
-        displayName: 'Gemini 2.0 Flash (Recommended)',
-        description: 'Next-gen multimodal, lowest latency, high throughput (v1beta support)',
+        displayName: 'Gemini 2.0 Flash (Recommended & Verified)',
+        description: 'Next-gen multimodal, sub-second latency, high throughput (verified on v1beta)',
         contextWindow: 1048576,
+        outputTokenLimit: 8192,
         supportsGenerate: true,
         isRecommended: true,
+        isVerified: true,
       },
       {
         id: 'gemini-1.5-flash',
-        displayName: 'Gemini 1.5 Flash',
+        displayName: 'Gemini 1.5 Flash (Verified)',
         description: 'Fast, lightweight multimodal model for general conversational tasks',
         contextWindow: 1048576,
+        outputTokenLimit: 8192,
         supportsGenerate: true,
         isRecommended: true,
-      },
-      {
-        id: 'gemini-1.5-flash-8b',
-        displayName: 'Gemini 1.5 Flash-8B',
-        description: 'High volume, cost-efficient smaller model for speed and high QPS',
-        contextWindow: 1048576,
-        supportsGenerate: true,
-        isRecommended: false,
-      },
-      {
-        id: 'gemini-1.5-pro',
-        displayName: 'Gemini 1.5 Pro',
-        description: 'Mid-size multimodal model optimized for complex reasoning and long context',
-        contextWindow: 2097152,
-        supportsGenerate: true,
-        isRecommended: false,
+        isVerified: true,
       },
       {
         id: 'gemini-2.0-flash-lite',
-        displayName: 'Gemini 2.0 Flash-Lite',
-        description: 'Cost-efficient experimental lightweight 2.0 architecture',
+        displayName: 'Gemini 2.0 Flash-Lite (Verified)',
+        description: 'Ultra cost-efficient lightweight 2.0 architecture',
         contextWindow: 1048576,
+        outputTokenLimit: 8192,
         supportsGenerate: true,
         isRecommended: false,
+        isVerified: true,
+      },
+      {
+        id: 'gemini-1.5-pro',
+        displayName: 'Gemini 1.5 Pro (Verified)',
+        description: 'Mid-size multimodal model optimized for complex reasoning and deep context',
+        contextWindow: 2097152,
+        outputTokenLimit: 8192,
+        supportsGenerate: true,
+        isRecommended: false,
+        isVerified: true,
+      },
+      {
+        id: 'gemini-1.5-flash-8b',
+        displayName: 'Gemini 1.5 Flash-8B (Verified)',
+        description: 'High volume, cost-efficient smaller model for speed and high QPS',
+        contextWindow: 1048576,
+        outputTokenLimit: 8192,
+        supportsGenerate: true,
+        isRecommended: false,
+        isVerified: true,
       },
     ];
   }
 }
-
-

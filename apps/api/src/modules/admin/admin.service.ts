@@ -809,6 +809,51 @@ export class AdminService {
     return this.fallbackEngine.discoverModels(provider);
   }
 
+  async resetAiCooldown(provider: AiProviderName, actorId: string, ipAddress?: string) {
+    const updated = await this.fallbackEngine.resetCooldown(provider);
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: 'AI_COOLDOWN_RESET',
+        entityType: 'AIProviderHealth',
+        entityId: updated.id,
+        ipAddress,
+        metadata: { provider },
+      },
+    });
+    return { success: true, message: `Cooldown reset successfully for ${provider}.` };
+  }
+
+  async retryAiProvider(provider: AiProviderName, actorId: string, ipAddress?: string) {
+    const result = await this.fallbackEngine.retryProvider(provider);
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: 'AI_PROVIDER_RETRIED',
+        entityType: 'AIProviderHealth',
+        entityId: provider,
+        ipAddress,
+        metadata: { provider, success: result.success },
+      },
+    });
+    return result;
+  }
+
+  async verifyAiModel(provider: AiProviderName, model: string, actorId: string, ipAddress?: string) {
+    const result = await this.fallbackEngine.verifyModel(provider, model);
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: 'AI_MODEL_VERIFIED',
+        entityType: 'AIProviderConfiguration',
+        entityId: provider,
+        ipAddress,
+        metadata: { provider, model, success: result.success },
+      },
+    });
+    return result;
+  }
+
   async resetAiDefaults(actorId: string, ipAddress?: string) {
     await this.fallbackEngine.restoreDefaultProviderOrder();
     await this.prisma.auditLog.create({

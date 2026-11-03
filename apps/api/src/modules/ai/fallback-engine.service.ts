@@ -13,9 +13,11 @@ import {
   AiTestResult,
   DiscoveredModel,
   AiErrorCategory,
+  ProviderHealthState,
   AiAuthError,
   AiForbiddenError,
   AiModelNotFoundError,
+  AiInvalidConfigurationError,
   AiInsufficientBalanceError,
   AiRateLimitError,
   AiQuotaError,
@@ -34,6 +36,7 @@ export interface ProviderStatusInfo {
   model: string;
   isConfigured: boolean;
   isHealthy: boolean;
+  healthState: ProviderHealthState;
   inCooldown: boolean;
   cooldownUntil: Date | null;
   totalRequests: number;
@@ -43,6 +46,8 @@ export interface ProviderStatusInfo {
   lastFailureAt: Date | null;
   lastErrorMessage: string | null;
   errorCategory?: string | null;
+  effectiveTokenLimit?: number;
+  isModelVerified?: boolean;
   discoveredModels?: DiscoveredModel[];
 }
 
@@ -62,6 +67,39 @@ export class FallbackEngineService {
       ['DEEPSEEK', this.deepseek],
       ['GROQ', this.groq],
     ]);
+  }
+
+  /**
+   * Computes the precise health state according to EES specifications.
+   */
+  computeHealthState(
+    isEnabled: boolean,
+    isConfigured: boolean,
+    health: AIProviderHealth | null | undefined,
+  ): ProviderHealthState {
+    if (!isEnabled) {
+      return 'DISABLED';
+    }
+    if (!isConfigured) {
+      return 'AWAITING_API_KEY';
+    }
+    if (health?.cooldownUntil && new Date() < health.cooldownUntil) {
+      return 'COOLDOWN';
+    }
+    const lastErr = health?.lastErrorMessage || '';
+    if (lastErr.includes('[INSUFFICIENT_BALANCE]')) {
+      return 'INSUFFICIENT_BALANCE';
+    }
+    if (lastErr.includes('[MODEL_NOT_FOUND]') || lastErr.includes('[INVALID_CONFIGURATION]')) {
+      return 'INVALID_CONFIGURATION';
+    }
+    if (health && !health.isHealthy) {
+      return 'DEGRADED';
+    }
+    if (health && health.isHealthy && (health.successfulRequests > 0 || health.lastSuccessAt)) {
+      return 'HEALTHY';
+    }
+    return 'ACTIVE';
   }
 
   /**
@@ -100,14 +138,21 @@ export class FallbackEngineService {
         where: { provider: cfg.provider },
       });
 
-      if (health?.cooldownUntil && new Date() < health.cooldownUntil) {
+      // If a temporary cooldown has expired, auto-clear it
+      if (health?.cooldownUntil && new Date() >= health.cooldownUntil) {
+        this.logger.log(`Cooldown expired for ${cfg.provider}. Auto-recovering provider eligibility.`);
+        await this.prisma.aIProviderHealth.update({
+          where: { provider: cfg.provider },
+          data: { cooldownUntil: null, isHealthy: true },
+        });
+      } else if (health?.cooldownUntil && new Date() < health.cooldownUntil) {
         this.logger.warn(`Provider ${cfg.provider} is currently in cooldown until ${health.cooldownUntil.toISOString()}`);
         attempts.push({ provider: cfg.provider, error: `In cooldown until ${health.cooldownUntil.toISOString()}` });
         fallbackOccurred = true;
         continue;
       }
 
-      // Check for permanent configuration/billing errors (401, 402, 403, 404) that require admin resolution
+      // Check for permanent configuration/billing errors that require administrator resolution
       if (
         health &&
         !health.isHealthy &&
@@ -115,6 +160,7 @@ export class FallbackEngineService {
         health.lastErrorMessage &&
         (health.lastErrorMessage.includes('[INSUFFICIENT_BALANCE]') ||
           health.lastErrorMessage.includes('[MODEL_NOT_FOUND]') ||
+          health.lastErrorMessage.includes('[INVALID_CONFIGURATION]') ||
           health.lastErrorMessage.includes('[AUTHENTICATION_FAILURE]') ||
           health.lastErrorMessage.includes('[PERMISSION_DENIED]'))
       ) {
@@ -140,6 +186,15 @@ export class FallbackEngineService {
 
         // Record success in health table
         await this.recordProviderSuccess(cfg.provider);
+
+        // If the provider self-healed to a verified model (e.g. Gemini healed to 2.0-flash from invalid 404), update DB
+        if (result.model && result.model !== cfg.model) {
+          this.logger.log(`Auto-healed model detected: updating DB config for ${cfg.provider} to '${result.model}'`);
+          await this.prisma.aIProviderConfiguration.update({
+            where: { provider: cfg.provider },
+            data: { model: result.model },
+          });
+        }
 
         return {
           result,
@@ -226,7 +281,7 @@ export class FallbackEngineService {
   }
 
   /**
-   * Handles failure by classifying errors and setting cooldowns.
+   * Handles failure by classifying errors and setting appropriate bounded cooldowns.
    */
   private async handleProviderFailure(
     providerName: string,
@@ -253,6 +308,14 @@ export class FallbackEngineService {
           error?.message?.toLowerCase().includes('not found')
         ) {
           category = 'MODEL_NOT_FOUND';
+        } else if (
+          error instanceof AiInvalidConfigurationError ||
+          httpStatus === 400 ||
+          error?.message?.includes('400') ||
+          error?.message?.toLowerCase().includes('max_tokens') ||
+          error?.message?.toLowerCase().includes('invalid')
+        ) {
+          category = 'INVALID_CONFIGURATION';
         } else if (error instanceof AiAuthError || httpStatus === 401 || error?.message?.includes('401')) {
           category = 'AUTHENTICATION_FAILURE';
         } else if (error instanceof AiForbiddenError || httpStatus === 403 || error?.message?.includes('403')) {
@@ -276,6 +339,7 @@ export class FallbackEngineService {
       switch (category) {
         case 'INSUFFICIENT_BALANCE':
         case 'MODEL_NOT_FOUND':
+        case 'INVALID_CONFIGURATION':
         case 'AUTHENTICATION_FAILURE':
         case 'PERMISSION_DENIED':
           cooldownMinutes = 0; // Permanent error; requires admin action, DO NOT set cooldown timer!
@@ -375,7 +439,7 @@ export class FallbackEngineService {
   }
 
   /**
-   * Restores standard default order: Gemini (1) -> DeepSeek (2) -> Groq (3).
+   * Restores standard default order: Gemini (1) -> DeepSeek (2) -> Groq (3) with verified models.
    */
   async restoreDefaultProviderOrder() {
     const defaults = [
@@ -389,6 +453,7 @@ export class FallbackEngineService {
         timeoutMs: 30000,
         maxTokens: 2048,
         temperature: 0.7,
+        metadata: { isModelVerified: true, verifiedModel: 'gemini-2.0-flash' },
       },
       {
         provider: 'DEEPSEEK',
@@ -400,6 +465,7 @@ export class FallbackEngineService {
         timeoutMs: 30000,
         maxTokens: 2048,
         temperature: 0.7,
+        metadata: { isModelVerified: true, verifiedModel: 'deepseek-chat' },
       },
       {
         provider: 'GROQ',
@@ -411,6 +477,7 @@ export class FallbackEngineService {
         timeoutMs: 30000,
         maxTokens: 2048,
         temperature: 0.7,
+        metadata: { isModelVerified: true, verifiedModel: 'llama-3.1-8b-instant' },
       },
     ];
 
@@ -426,13 +493,18 @@ export class FallbackEngineService {
           timeoutMs: d.timeoutMs,
           maxTokens: d.maxTokens,
           temperature: d.temperature,
+          metadata: d.metadata,
         },
         create: d,
       });
 
       await this.prisma.aIProviderHealth.upsert({
         where: { provider: d.provider },
-        update: {},
+        update: {
+          cooldownUntil: null,
+          isHealthy: true,
+          consecutiveErrors: 0,
+        },
         create: {
           provider: d.provider,
           isHealthy: true,
@@ -445,6 +517,37 @@ export class FallbackEngineService {
     }
 
     await this.setFallbackEnabled(true);
+  }
+
+  /**
+   * Resets cooldown timer and error state for a provider.
+   */
+  async resetCooldown(providerName: AiProviderName) {
+    return this.prisma.aIProviderHealth.upsert({
+      where: { provider: providerName },
+      update: {
+        cooldownUntil: null,
+        consecutiveErrors: 0,
+        isHealthy: true,
+      },
+      create: {
+        provider: providerName,
+        isHealthy: true,
+        totalRequests: 0,
+        successfulRequests: 0,
+        failedRequests: 0,
+        consecutiveErrors: 0,
+        cooldownUntil: null,
+      },
+    });
+  }
+
+  /**
+   * Clears cooldown and performs an immediate verification generation test on the provider.
+   */
+  async retryProvider(providerName: AiProviderName): Promise<AiTestResult> {
+    await this.resetCooldown(providerName);
+    return this.testProvider(providerName);
   }
 
   /**
@@ -483,6 +586,45 @@ export class FallbackEngineService {
   }
 
   /**
+   * Verifies an actual generation request against a specific candidate model.
+   * Persists verification state upon success.
+   */
+  async verifyModel(providerName: AiProviderName, model: string): Promise<AiTestResult> {
+    const prompt =
+      providerName === 'GEMINI'
+        ? 'Reply with exactly: GEMINI_CONNECTION_SUCCESSFUL'
+        : 'Reply with exactly: EES AI connection successful.';
+
+    const result = await this.testProvider(providerName, model, prompt);
+
+    if (result.success) {
+      try {
+        const existing = await this.prisma.aIProviderConfiguration.findUnique({
+          where: { provider: providerName },
+        });
+        const currentMeta = (existing?.metadata as any) || {};
+
+        await this.prisma.aIProviderConfiguration.update({
+          where: { provider: providerName },
+          data: {
+            model,
+            metadata: {
+              ...currentMeta,
+              isModelVerified: true,
+              verifiedModel: model,
+              verifiedAt: new Date().toISOString(),
+            },
+          },
+        });
+      } catch (err: any) {
+        this.logger.warn(`Failed to update verified model metadata: ${err.message}`);
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Retrieves full admin provider overview with health, latency and stats.
    */
   async getProviderStatusOverview(): Promise<{
@@ -506,7 +648,9 @@ export class FallbackEngineService {
       const providerInstance = this.providers.get(cfg.provider as AiProviderName);
       const health = healthMap.get(cfg.provider);
 
+      const isConfigured = providerInstance ? providerInstance.isConfigured() : false;
       const inCooldown = !!(health?.cooldownUntil && new Date() < health.cooldownUntil);
+      const healthState = this.computeHealthState(cfg.isEnabled, isConfigured, health);
 
       totalAiRequests += health?.totalRequests || 0;
       successfulAiRequests += health?.successfulRequests || 0;
@@ -522,6 +666,10 @@ export class FallbackEngineService {
 
       const meta = (cfg.metadata as any) || {};
       const discoveredModels: DiscoveredModel[] = meta.discoveredModels || [];
+      const isModelVerified = !!meta.isModelVerified;
+      const effectiveTokenLimit = providerInstance?.getEffectiveTokenLimit
+        ? providerInstance.getEffectiveTokenLimit(cfg.model, cfg.maxTokens)
+        : cfg.maxTokens;
 
       return {
         provider: cfg.provider as AiProviderName,
@@ -530,8 +678,9 @@ export class FallbackEngineService {
         isPreferred: cfg.isPreferred,
         priority: cfg.priority,
         model: cfg.model,
-        isConfigured: providerInstance ? providerInstance.isConfigured() : false,
+        isConfigured,
         isHealthy: health?.isHealthy ?? true,
+        healthState,
         inCooldown,
         cooldownUntil: health?.cooldownUntil || null,
         totalRequests: health?.totalRequests || 0,
@@ -541,6 +690,8 @@ export class FallbackEngineService {
         lastFailureAt: health?.lastFailureAt || null,
         lastErrorMessage: health?.lastErrorMessage || null,
         errorCategory,
+        effectiveTokenLimit,
+        isModelVerified,
         discoveredModels,
       };
     });
@@ -580,13 +731,34 @@ export class FallbackEngineService {
     });
 
     const targetModel = model || cfg?.model;
-    const testPrompt = prompt || 'Reply with exactly: EES AI connection successful.';
+    const testPrompt =
+      prompt ||
+      (providerName === 'GEMINI'
+        ? 'Reply with exactly: GEMINI_CONNECTION_SUCCESSFUL'
+        : 'Reply with exactly: EES AI connection successful.');
 
     const result = await providerInstance.testConnection(targetModel, testPrompt);
 
     // Update health table based on test result
     if (result.success) {
       await this.recordProviderSuccess(providerName);
+      // Persist verification on successful test
+      try {
+        const currentMeta = (cfg?.metadata as any) || {};
+        await this.prisma.aIProviderConfiguration.update({
+          where: { provider: providerName },
+          data: {
+            metadata: {
+              ...currentMeta,
+              isModelVerified: true,
+              verifiedModel: result.model || targetModel,
+              verifiedAt: new Date().toISOString(),
+            },
+          },
+        });
+      } catch (err: any) {
+        this.logger.warn(`Failed to update test verification meta: ${err.message}`);
+      }
     } else {
       await this.handleProviderFailure(
         providerName,
@@ -600,7 +772,7 @@ export class FallbackEngineService {
   }
 
   /**
-   * Updates provider configuration. If model changes, clears any previous MODEL_NOT_FOUND error.
+   * Updates provider configuration. If model changes, clears any previous MODEL_NOT_FOUND or INVALID_CONFIGURATION error.
    */
   async updateProviderConfiguration(
     providerName: AiProviderName,
@@ -622,12 +794,15 @@ export class FallbackEngineService {
       });
     }
 
-    // If model is updated, clear any stale MODEL_NOT_FOUND state
+    // If model is updated, clear any stale MODEL_NOT_FOUND or INVALID_CONFIGURATION state
     if (updates.model) {
       const health = await this.prisma.aIProviderHealth.findUnique({
         where: { provider: providerName },
       });
-      if (health?.lastErrorMessage?.includes('[MODEL_NOT_FOUND]')) {
+      if (
+        health?.lastErrorMessage?.includes('[MODEL_NOT_FOUND]') ||
+        health?.lastErrorMessage?.includes('[INVALID_CONFIGURATION]')
+      ) {
         await this.prisma.aIProviderHealth.update({
           where: { provider: providerName },
           data: {

@@ -267,6 +267,43 @@ export class AdminController {
     return this.adminService.discoverAiModels(provider);
   }
 
+  @Post('ai/reset-cooldown/:provider')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Reset cooldown timer for an AI provider' })
+  async resetAiCooldown(
+    @Param('provider') provider: any,
+    @CurrentUser('id') actorId: string,
+    @Req() req: Request,
+  ) {
+    const ip = req.ip || req.socket.remoteAddress;
+    return this.adminService.resetAiCooldown(provider, actorId, ip);
+  }
+
+  @Post('ai/retry/:provider')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Clear cooldown and retry generation test on an AI provider' })
+  async retryAiProvider(
+    @Param('provider') provider: any,
+    @CurrentUser('id') actorId: string,
+    @Req() req: Request,
+  ) {
+    const ip = req.ip || req.socket.remoteAddress;
+    return this.adminService.retryAiProvider(provider, actorId, ip);
+  }
+
+  @Post('ai/verify-model/:provider')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Verify actual generation on a candidate model and persist verification state' })
+  async verifyAiModel(
+    @Param('provider') provider: any,
+    @Body() body: { model: string },
+    @CurrentUser('id') actorId: string,
+    @Req() req: Request,
+  ) {
+    const ip = req.ip || req.socket.remoteAddress;
+    return this.adminService.verifyAiModel(provider, body.model, actorId, ip);
+  }
+
   @Post('ai/reset-defaults')
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Restore default AI provider order (Gemini -> DeepSeek -> Groq)' })

@@ -5,6 +5,8 @@ import { AiService } from '../src/modules/ai/ai.service';
 import { AdminService } from '../src/modules/admin/admin.service';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { PrismaService } from '../src/database/prisma.service';
+import { GroqProvider } from '../src/modules/ai/providers/groq.provider';
+import { GeminiProvider } from '../src/modules/ai/providers/gemini.provider';
 import {
   AiAuthError,
   AiEmptyResponseError,
@@ -528,6 +530,98 @@ describe('AI Multi-Provider Fallback, Context & Admin Security Tests', () => {
           }),
         }),
       );
+    });
+
+    it('should compute all 8 distinct provider health states accurately', () => {
+      // 1. DISABLED
+      expect(fallbackEngine.computeHealthState(false, true, null)).toBe('DISABLED');
+
+      // 2. AWAITING_API_KEY
+      expect(fallbackEngine.computeHealthState(true, false, null)).toBe('AWAITING_API_KEY');
+
+      // 3. COOLDOWN
+      const futureDate = new Date(Date.now() + 60000);
+      expect(
+        fallbackEngine.computeHealthState(true, true, {
+          cooldownUntil: futureDate,
+        } as any),
+      ).toBe('COOLDOWN');
+
+      // 4. INSUFFICIENT_BALANCE
+      expect(
+        fallbackEngine.computeHealthState(true, true, {
+          isHealthy: false,
+          cooldownUntil: null,
+          lastErrorMessage: '[INSUFFICIENT_BALANCE] Account balance is depleted',
+        } as any),
+      ).toBe('INSUFFICIENT_BALANCE');
+
+      // 5. INVALID_CONFIGURATION (e.g. 404 MODEL_NOT_FOUND or 400 token error)
+      expect(
+        fallbackEngine.computeHealthState(true, true, {
+          isHealthy: false,
+          cooldownUntil: null,
+          lastErrorMessage: '[MODEL_NOT_FOUND] Model not found',
+        } as any),
+      ).toBe('INVALID_CONFIGURATION');
+
+      // 6. DEGRADED
+      expect(
+        fallbackEngine.computeHealthState(true, true, {
+          isHealthy: false,
+          cooldownUntil: null,
+          lastErrorMessage: '[SERVER_OUTAGE] Service unavailable',
+        } as any),
+      ).toBe('DEGRADED');
+
+      // 7. HEALTHY
+      expect(
+        fallbackEngine.computeHealthState(true, true, {
+          isHealthy: true,
+          successfulRequests: 5,
+          lastSuccessAt: new Date(),
+          cooldownUntil: null,
+        } as any),
+      ).toBe('HEALTHY');
+
+      // 8. ACTIVE (no requests yet, healthy, enabled, configured)
+      expect(
+        fallbackEngine.computeHealthState(true, true, {
+          isHealthy: true,
+          successfulRequests: 0,
+          lastSuccessAt: null,
+          cooldownUntil: null,
+        } as any),
+      ).toBe('ACTIVE');
+    });
+
+    it('should reset cooldown and allow admin retry on a provider', async () => {
+      mockPrisma.aIProviderHealth.upsert.mockResolvedValue({
+        id: 'health-1',
+        provider: 'GEMINI',
+        isHealthy: true,
+        cooldownUntil: null,
+      });
+
+      const resetRes = await fallbackEngine.resetCooldown('GEMINI');
+      expect(mockPrisma.aIProviderHealth.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { provider: 'GEMINI' },
+          update: expect.objectContaining({ cooldownUntil: null, isHealthy: true }),
+        }),
+      );
+
+      const retryRes = await fallbackEngine.retryProvider('GEMINI');
+      expect(retryRes.success).toBe(true);
+      expect(mockGemini.testConnection).toHaveBeenCalled();
+    });
+
+    it('should clamp Groq 70B models to 512 max output tokens and allow 2048 on 8B models', () => {
+      const groq = new GroqProvider();
+      expect(groq.getEffectiveTokenLimit('llama-3.3-70b-versatile', 2048)).toBe(512);
+      expect(groq.getEffectiveTokenLimit('llama3-70b-8192', 4096)).toBe(512);
+      expect(groq.getEffectiveTokenLimit('llama-3.1-8b-instant', 2048)).toBe(2048);
+      expect(groq.getEffectiveTokenLimit('mixtral-8x7b-32768', 2048)).toBe(1024);
     });
   });
 });

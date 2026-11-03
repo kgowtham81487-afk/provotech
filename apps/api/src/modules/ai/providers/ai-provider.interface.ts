@@ -5,6 +5,7 @@ export type AiErrorCategory =
   | 'INSUFFICIENT_BALANCE'   // 402
   | 'PERMISSION_DENIED'       // 403
   | 'MODEL_NOT_FOUND'        // 404
+  | 'INVALID_CONFIGURATION'  // 400
   | 'RATE_LIMITED'           // 429
   | 'QUOTA_EXHAUSTED'        // 429 quota
   | 'SERVER_OUTAGE'          // 5xx
@@ -13,6 +14,16 @@ export type AiErrorCategory =
   | 'NETWORK_ERROR'          // Connection refused, DNS
   | 'PROVIDER_ERROR'         // General provider failure
   | 'UNKNOWN_ERROR';
+
+export type ProviderHealthState =
+  | 'ACTIVE'
+  | 'HEALTHY'
+  | 'DEGRADED'
+  | 'COOLDOWN'
+  | 'INVALID_CONFIGURATION'
+  | 'INSUFFICIENT_BALANCE'
+  | 'AWAITING_API_KEY'
+  | 'DISABLED';
 
 export interface AiMessageInput {
   role: 'user' | 'assistant' | 'system';
@@ -52,8 +63,10 @@ export interface DiscoveredModel {
   displayName: string;
   description?: string;
   contextWindow?: number;
+  outputTokenLimit?: number;
   supportsGenerate: boolean;
   isRecommended?: boolean;
+  isVerified?: boolean;
 }
 
 export class AiProviderError extends Error {
@@ -67,6 +80,13 @@ export class AiProviderError extends Error {
   ) {
     super(message);
     this.name = 'AiProviderError';
+  }
+}
+
+export class AiInvalidConfigurationError extends AiProviderError {
+  constructor(provider: AiProviderName, message = 'Invalid request configuration or unsupported parameter') {
+    super(message, provider, 400, false, false, 'INVALID_CONFIGURATION');
+    this.name = 'AiInvalidConfigurationError';
   }
 }
 
@@ -137,9 +157,8 @@ export interface AiProvider {
   readonly name: AiProviderName;
   isConfigured(): boolean;
   getDefaultModel(): string;
+  getEffectiveTokenLimit?(model: string, requestedTokens?: number): number;
   generate(messages: AiMessageInput[], options?: AiGenerateOptions): Promise<AiGenerateResult>;
   testConnection(model?: string, prompt?: string): Promise<AiTestResult>;
   discoverModels(): Promise<DiscoveredModel[]>;
 }
-
-

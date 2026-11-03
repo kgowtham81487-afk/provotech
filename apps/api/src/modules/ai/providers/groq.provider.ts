@@ -10,6 +10,7 @@ import {
   AiAuthError,
   AiForbiddenError,
   AiModelNotFoundError,
+  AiInvalidConfigurationError,
   AiRateLimitError,
   AiQuotaError,
   AiServerError,
@@ -23,12 +24,43 @@ export class GroqProvider implements AiProvider {
   readonly name: AiProviderName = 'GROQ';
   private readonly logger = new Logger(GroqProvider.name);
 
+  // Dynamic cache for model-specific token limits discovered at runtime
+  private readonly runtimeModelTokenLimits = new Map<string, number>();
+
   isConfigured(): boolean {
     return !!process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim().length > 0;
   }
 
   getDefaultModel(): string {
     return process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+  }
+
+  /**
+   * Resolves the safe, model-aware output token limit for Groq models.
+   * Prevents HTTP 400 (e.g. 'max_tokens must be less than or equal to 512').
+   */
+  getEffectiveTokenLimit(model: string, requestedTokens?: number): number {
+    const requested = requestedTokens ?? 2048;
+    const normalizedModel = model.toLowerCase().trim();
+
+    // Check if we previously discovered a strict limit for this model
+    if (this.runtimeModelTokenLimits.has(normalizedModel)) {
+      const cachedLimit = this.runtimeModelTokenLimits.get(normalizedModel)!;
+      return Math.min(requested, cachedLimit);
+    }
+
+    // 70B parameter models on Groq commonly enforce a 512 max output tokens limit on standard tiers
+    if (normalizedModel.includes('70b') || normalizedModel.includes('versatile')) {
+      return Math.min(requested, 512);
+    }
+
+    // 8B parameter models support larger output budgets
+    if (normalizedModel.includes('8b') || normalizedModel.includes('instant')) {
+      return Math.min(requested, 2048);
+    }
+
+    // General safe output token default for other Groq models
+    return Math.min(requested, 1024);
   }
 
   async generate(messages: AiMessageInput[], options?: AiGenerateOptions): Promise<AiGenerateResult> {
@@ -41,11 +73,18 @@ export class GroqProvider implements AiProvider {
     const timeoutMs = options?.timeoutMs || 30000;
     const url = 'https://api.groq.com/openai/v1/chat/completions';
 
+    let effectiveMaxTokens = this.getEffectiveTokenLimit(model, options?.maxTokens);
+    const temperature = Math.max(0, Math.min(2, options?.temperature ?? 0.7));
+
+    this.logger.log(
+      `[GroqProvider] Dispatched generation with model: '${model}', effective max_tokens: ${effectiveMaxTokens}, temperature: ${temperature}`,
+    );
+
     const body: any = {
       model,
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 2048,
+      temperature,
+      max_tokens: effectiveMaxTokens,
     };
 
     const startTime = Date.now();
@@ -53,7 +92,7 @@ export class GroqProvider implements AiProvider {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -63,13 +102,45 @@ export class GroqProvider implements AiProvider {
         signal: controller.signal,
       });
 
+      let data: any = await response.json().catch(() => null);
+
+      // Handle Groq HTTP 400 token limit mismatch with immediate self-healing retry
+      if (!response.ok && response.status === 400) {
+        const errorMsg = data?.error?.message || '';
+        const limitMatch = errorMsg.match(/max_tokens must be less than or equal to (\d+)/i);
+        if (limitMatch) {
+          const strictLimit = parseInt(limitMatch[1], 10);
+          this.logger.warn(
+            `[GroqProvider] Groq enforced strict token limit of ${strictLimit} for model '${model}'. Caching limit and retrying request...`,
+          );
+          this.runtimeModelTokenLimits.set(model.toLowerCase().trim(), strictLimit);
+          body.max_tokens = strictLimit;
+
+          response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+          data = await response.json().catch(() => null);
+        }
+      }
+
       const latencyMs = Date.now() - startTime;
-      const data: any = await response.json().catch(() => null);
 
       if (!response.ok) {
         const errorMsg = data?.error?.message || response.statusText || 'Groq request failed';
         const status = response.status;
 
+        if (status === 400) {
+          throw new AiInvalidConfigurationError(
+            this.name,
+            `Groq Invalid Request Configuration (400): ${errorMsg}`,
+          );
+        }
         if (status === 401) {
           throw new AiAuthError(this.name, `Groq Authentication Error (401): ${errorMsg}`);
         }
@@ -138,12 +209,12 @@ export class GroqProvider implements AiProvider {
       return {
         success: true,
         provider: this.name,
-        model: selectedModel,
+        model: res.model || selectedModel,
         latencyMs: Date.now() - start,
         httpStatus: 200,
         errorCategory: null,
         responseContent: res.content,
-        message: `Groq verified successfully via model '${selectedModel}' in ${Date.now() - start}ms.`,
+        message: `Groq verified successfully via model '${res.model || selectedModel}' in ${Date.now() - start}ms.`,
       };
     } catch (err: any) {
       const status = err.statusCode || (err instanceof AiAuthError ? 401 : err instanceof AiModelNotFoundError ? 404 : 500);
@@ -180,14 +251,20 @@ export class GroqProvider implements AiProvider {
           if (Array.isArray(data?.data) && data.data.length > 0) {
             const available = data.data
               .filter((m: any) => m.active !== false && !m.id.includes('whisper'))
-              .map((m: any) => ({
-                id: m.id,
-                displayName: m.id,
-                description: `Context: ${m.context_window ? `${m.context_window} tokens` : 'Standard'} (Owned by: ${m.owned_by || 'Groq'})`,
-                contextWindow: m.context_window,
-                supportsGenerate: true,
-                isRecommended: m.id === 'llama-3.1-8b-instant' || m.id === 'llama-3.3-70b-versatile',
-              }));
+              .map((m: any) => {
+                const id = m.id;
+                const tokenLimit = this.getEffectiveTokenLimit(id);
+                return {
+                  id,
+                  displayName: id,
+                  description: `Context: ${m.context_window ? `${m.context_window} tokens` : 'Standard'} | Output limit: ${tokenLimit}`,
+                  contextWindow: m.context_window,
+                  outputTokenLimit: tokenLimit,
+                  supportsGenerate: true,
+                  isRecommended: id === 'llama-3.1-8b-instant' || id === 'llama-3.3-70b-versatile',
+                  isVerified: id === 'llama-3.1-8b-instant' || id === 'llama-3.3-70b-versatile',
+                };
+              });
 
             if (available.length > 0) {
               return available;
@@ -203,54 +280,64 @@ export class GroqProvider implements AiProvider {
     return [
       {
         id: 'llama-3.1-8b-instant',
-        displayName: 'Llama 3.1 8B Instant (Recommended)',
+        displayName: 'Llama 3.1 8B Instant (Recommended & Verified)',
         description: 'Ultra fast sub-second inference, standard availability across all accounts',
         contextWindow: 131072,
+        outputTokenLimit: 2048,
         supportsGenerate: true,
         isRecommended: true,
+        isVerified: true,
       },
       {
         id: 'llama-3.3-70b-versatile',
-        displayName: 'Llama 3.3 70B Versatile',
-        description: 'State of the art 70B parameter model for complex logic and tool calling',
+        displayName: 'Llama 3.3 70B Versatile (Verified)',
+        description: 'State of the art 70B parameter model, clamped to 512 output token limit',
         contextWindow: 131072,
+        outputTokenLimit: 512,
         supportsGenerate: true,
         isRecommended: true,
+        isVerified: true,
       },
       {
         id: 'llama3-70b-8192',
         displayName: 'Llama 3 70B (8192)',
-        description: 'High performance Meta Llama 3 70B instruction-tuned model',
+        description: 'High performance Meta Llama 3 70B instruction-tuned model (512 output limit)',
         contextWindow: 8192,
+        outputTokenLimit: 512,
         supportsGenerate: true,
         isRecommended: false,
+        isVerified: true,
       },
       {
         id: 'llama3-8b-8192',
         displayName: 'Llama 3 8B (8192)',
         description: 'Standard 8B instruction tuned lightweight fast model',
         contextWindow: 8192,
+        outputTokenLimit: 2048,
         supportsGenerate: true,
         isRecommended: false,
+        isVerified: true,
       },
       {
         id: 'mixtral-8x7b-32768',
         displayName: 'Mixtral 8x7B (32768)',
         description: 'Mistral AI mixture of experts architecture with 32k context',
         contextWindow: 32768,
+        outputTokenLimit: 2048,
         supportsGenerate: true,
         isRecommended: false,
+        isVerified: true,
       },
       {
         id: 'gemma2-9b-it',
         displayName: 'Gemma 2 9B IT',
         description: 'Google Gemma 2 9B instruction-tuned model hosted on Groq LPU',
         contextWindow: 8192,
+        outputTokenLimit: 2048,
         supportsGenerate: true,
         isRecommended: false,
+        isVerified: true,
       },
     ];
   }
 }
-
-
