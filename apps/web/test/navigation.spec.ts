@@ -4,7 +4,7 @@ import nextConfig from '../next.config.mjs';
 describe('Frontend Navigation & Routing Contract Tests', () => {
   it('should define redirects for all legacy or subpath routes without 404', async () => {
     expect(nextConfig.redirects).toBeDefined();
-    const redirects = await nextConfig.redirects();
+    const redirects = nextConfig.redirects ? await nextConfig.redirects() : [];
 
     const expectedRedirects = [
       { source: '/evolve/learning', destination: '/evolve?tab=learning' },

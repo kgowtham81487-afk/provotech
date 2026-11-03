@@ -147,7 +147,7 @@ export default function ProfilePage() {
                 <div className="text-center sm:text-left">
                   <div className="text-xs text-slate-400 uppercase font-semibold">Role Tier</div>
                   <div className="text-xl font-bold text-white mt-0.5">
-                    {profileData?.roles?.[0]?.role?.name || 'STANDARD_USER'}
+                    {profileData?.roles?.[0]?.role?.name || profileData?.roles?.[0] || 'USER'}
                   </div>
                 </div>
                 <div className="text-center sm:text-left">

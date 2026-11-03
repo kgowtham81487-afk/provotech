@@ -4,6 +4,8 @@ import {
   UnauthorizedException,
   BadRequestException,
   NotFoundException,
+  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -13,6 +15,7 @@ import { RegisterInput, LoginInput, ResetPasswordInput } from '@ees/shared';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly jwtSecret = process.env.JWT_SECRET || 'dev-ees-jwt-super-secret-key-32charsmin';
   private readonly jwtExpiration = process.env.JWT_EXPIRATION || '15m';
   private readonly refreshSecret = process.env.JWT_REFRESH_SECRET || 'dev-ees-refresh-secret-key-32charsmin';
@@ -22,6 +25,7 @@ export class AuthService {
   async register(input: RegisterInput, ipAddress?: string) {
     const email = input.email.toLowerCase().trim();
     const username = input.username.toLowerCase().trim();
+    const displayName = input.displayName.trim();
 
     // Check unique email
     const existingEmail = await this.prisma.user.findUnique({ where: { email } });
@@ -35,61 +39,67 @@ export class AuthService {
       throw new ConflictException('This username is already taken. Please choose another.');
     }
 
-    // Standard user role
+    // Canonical default role: look up 'USER' first, fallback to 'STANDARD_USER' for backward compatibility
     const defaultRole =
-      (await this.prisma.role.findUnique({ where: { name: 'STANDARD_USER' } })) ||
-      (await this.prisma.role.findUnique({ where: { name: 'USER' } }));
+      (await this.prisma.role.findUnique({ where: { name: 'USER' } })) ||
+      (await this.prisma.role.findUnique({ where: { name: 'STANDARD_USER' } }));
 
     if (!defaultRole) {
-      throw new Error('Default USER role is not initialized in the database.');
+      this.logger.error('CRITICAL: Default USER role is not initialized in the database. Run prisma db seed.');
+      throw new InternalServerErrorException('Default USER role is not initialized in the database.');
     }
 
     const passwordHash = await bcrypt.hash(input.password, 12);
 
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        profile: {
-          create: {
-            username,
-            displayName: input.displayName.trim(),
-            isPublic: true,
+    // Atomically create user, profile, settings, role assignment and streak within a transaction
+    const user = await this.prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email,
+          passwordHash,
+          profile: {
+            create: {
+              username,
+              displayName,
+              isPublic: true,
+            },
+          },
+          settings: {
+            create: {
+              emailNotifications: true,
+              inAppNotifications: true,
+            },
+          },
+          roles: {
+            create: {
+              roleId: defaultRole.id,
+            },
+          },
+          streak: {
+            create: {
+              currentCount: 0,
+              longestCount: 0,
+            },
           },
         },
-        settings: {
-          create: {
-            emailNotifications: true,
-            inAppNotifications: true,
-          },
+        include: {
+          profile: true,
+          roles: { include: { role: true } },
         },
-        roles: {
-          create: {
-            roleId: defaultRole.id,
-          },
-        },
-        streak: {
-          create: {
-            currentCount: 0,
-            longestCount: 0,
-          },
-        },
-      },
-      include: {
-        profile: true,
-        roles: { include: { role: true } },
-      },
-    });
+      });
 
-    await this.prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        action: 'USER_REGISTERED',
-        entityType: 'User',
-        entityId: user.id,
-        ipAddress,
-        metadata: { email, username },
-      },
+      await tx.auditLog.create({
+        data: {
+          userId: createdUser.id,
+          action: 'USER_REGISTERED',
+          entityType: 'User',
+          entityId: createdUser.id,
+          ipAddress,
+          metadata: { email, username, assignedRole: defaultRole.name },
+        },
+      });
+
+      return createdUser;
     });
 
     const tokens = await this.generateTokens(user);

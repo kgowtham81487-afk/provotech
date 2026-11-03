@@ -16,11 +16,11 @@ export default function AdminUsersPage() {
 
   // Modals state
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ email: '', password: '', displayName: '', role: 'STANDARD_USER' });
+  const [createForm, setCreateForm] = useState({ email: '', password: '', displayName: '', role: 'USER' });
   const [creating, setCreating] = useState(false);
 
   const [roleModalUser, setRoleModalUser] = useState<any | null>(null);
-  const [newRole, setNewRole] = useState('STANDARD_USER');
+  const [newRole, setNewRole] = useState('USER');
   const [changingRole, setChangingRole] = useState(false);
 
   const [resetLinkData, setResetLinkData] = useState<{ email: string; resetUrl: string; expiresAt: string } | null>(null);
@@ -63,7 +63,7 @@ export default function AdminUsersPage() {
       await api.post('/admin/users', createForm);
       setFeedback({ type: 'success', message: `User account created successfully for ${createForm.email}` });
       setShowCreateModal(false);
-      setCreateForm({ email: '', password: '', displayName: '', role: 'STANDARD_USER' });
+      setCreateForm({ email: '', password: '', displayName: '', role: 'USER' });
       fetchUsers(pagination.page);
     } catch (err: any) {
       setFeedback({ type: 'error', message: err?.message || 'Failed to create user' });
@@ -208,6 +208,7 @@ export default function AdminUsersPage() {
             <option value="OPPORTUNITY_MANAGER">OPPORTUNITY_MANAGER</option>
             <option value="CONTENT_EDITOR">CONTENT_EDITOR</option>
             <option value="SUPPORT">SUPPORT</option>
+            <option value="USER">USER</option>
             <option value="STANDARD_USER">STANDARD_USER</option>
           </select>
 
@@ -324,7 +325,7 @@ export default function AdminUsersPage() {
                           <button
                             onClick={() => {
                               setRoleModalUser(u);
-                              setNewRole(roleNames[0] || 'STANDARD_USER');
+                              setNewRole(roleNames[0] || 'USER');
                             }}
                             className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] transition"
                             title="Change Role"
@@ -446,7 +447,8 @@ export default function AdminUsersPage() {
                   onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-indigo-500"
                 >
-                  <option value="STANDARD_USER">STANDARD_USER</option>
+                  <option value="USER">USER</option>
+                  <option value="STANDARD_USER">STANDARD_USER (Legacy)</option>
                   <option value="SUPPORT">SUPPORT</option>
                   <option value="CONTENT_EDITOR">CONTENT_EDITOR</option>
                   <option value="OPPORTUNITY_MANAGER">OPPORTUNITY_MANAGER</option>
@@ -493,7 +495,8 @@ export default function AdminUsersPage() {
                   onChange={(e) => setNewRole(e.target.value)}
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-indigo-500"
                 >
-                  <option value="STANDARD_USER">STANDARD_USER</option>
+                  <option value="USER">USER</option>
+                  <option value="STANDARD_USER">STANDARD_USER (Legacy)</option>
                   <option value="SUPPORT">SUPPORT</option>
                   <option value="CONTENT_EDITOR">CONTENT_EDITOR</option>
                   <option value="OPPORTUNITY_MANAGER">OPPORTUNITY_MANAGER</option>

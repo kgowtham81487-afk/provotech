@@ -6,7 +6,7 @@ export const USER_ROLES = {
   CONTENT_EDITOR: 'CONTENT_EDITOR',
   SUPPORT: 'SUPPORT',
   STANDARD_USER: 'STANDARD_USER',
-  USER: 'STANDARD_USER',
+  USER: 'USER',
 } as const;
 
 export type UserRoleType = (typeof USER_ROLES)[keyof typeof USER_ROLES];

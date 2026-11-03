@@ -14,8 +14,8 @@ async function main() {
     { name: 'OPPORTUNITY_MANAGER', description: 'Manage Provolution opportunities and applications' },
     { name: 'CONTENT_EDITOR', description: 'Manage public articles, SEO guides, and AdSense content' },
     { name: 'SUPPORT', description: 'User assistance and inquiry handling' },
-    { name: 'STANDARD_USER', description: 'Standard platform participant' },
-    { name: 'USER', description: 'Standard platform participant (alias)' },
+    { name: 'STANDARD_USER', description: 'Standard platform participant (legacy compatibility)' },
+    { name: 'USER', description: 'Canonical standard platform participant' },
   ];
 
   for (const role of roles) {
