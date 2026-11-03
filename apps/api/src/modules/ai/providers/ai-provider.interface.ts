@@ -85,3 +85,4 @@ export interface AiProvider {
   generate(messages: AiMessageInput[], options?: AiGenerateOptions): Promise<AiGenerateResult>;
   testConnection(model?: string): Promise<AiTestResult>;
 }
+

@@ -541,6 +541,100 @@ async function main() {
   console.log('✓ AI Provider configurations seeded.');
   }
 
+  // 12. Fitness Exercise Library Seeding
+  const exercises = [
+    { name: 'Barbell Bench Press', category: 'CHEST', muscleGroup: 'Chest', secondaryMuscles: 'Triceps, Front Delts', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Lie on a flat bench, grip barbell slightly wider than shoulder width. Lower bar smoothly to mid-chest and drive back up.' },
+    { name: 'Incline Dumbbell Press', category: 'CHEST', muscleGroup: 'Chest', secondaryMuscles: 'Upper Chest, Triceps', equipment: 'DUMBBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Set bench to 30-45 degrees. Press dumbbells upward smoothly until arms are extended.' },
+    { name: 'Dips', category: 'CHEST', muscleGroup: 'Chest', secondaryMuscles: 'Triceps, Shoulders', equipment: 'BODYWEIGHT', exerciseType: 'BODYWEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Lower your body on parallel bars with a slight forward torso lean, then press back to lockout.' },
+    { name: 'Push-Ups', category: 'CHEST', muscleGroup: 'Chest', secondaryMuscles: 'Triceps, Core', equipment: 'BODYWEIGHT', exerciseType: 'BODYWEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Standard pushup posture with straight spine and core braced. Touch chest near ground.' },
+    { name: 'Barbell Deadlift', category: 'BACK', muscleGroup: 'Back', secondaryMuscles: 'Hamstrings, Glutes, Forearms', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'ADVANCED', instructions: 'Hips back, chest tall, maintain neutral spine while pulling barbell off floor to full hip extension.' },
+    { name: 'Pull-Ups', category: 'BACK', muscleGroup: 'Back', secondaryMuscles: 'Biceps, Forearms', equipment: 'BODYWEIGHT', exerciseType: 'BODYWEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Overhand grip on bar. Pull chest toward bar until chin clears bar height.' },
+    { name: 'Lat Pulldown', category: 'BACK', muscleGroup: 'Back', secondaryMuscles: 'Biceps', equipment: 'CABLE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Pull cable bar downward to upper chest, retracting shoulder blades.' },
+    { name: 'Bent-Over Barbell Row', category: 'BACK', muscleGroup: 'Back', secondaryMuscles: 'Lats, Rhomboids, Biceps', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Hinge at hips with straight back. Pull barbell into lower abdomen.' },
+    { name: 'Overhead Barbell Press', category: 'SHOULDERS', muscleGroup: 'Shoulders', secondaryMuscles: 'Triceps, Upper Chest', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Press barbell overhead from collarbone to full arm lockout without arching lower back.' },
+    { name: 'Dumbbell Lateral Raise', category: 'SHOULDERS', muscleGroup: 'Shoulders', secondaryMuscles: 'Traps', equipment: 'DUMBBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Raise dumbbells outward to shoulder height with slight elbow bend.' },
+    { name: 'Face Pulls', category: 'SHOULDERS', muscleGroup: 'Shoulders', secondaryMuscles: 'Rear Delts, Rotator Cuff', equipment: 'CABLE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Pull rope attachment toward face, flaring elbows back and out.' },
+    { name: 'Barbell Bicep Curl', category: 'BICEPS', muscleGroup: 'Biceps', secondaryMuscles: 'Forearms', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Keep elbows tucked to sides, curl barbell up toward shoulders.' },
+    { name: 'Hammer Curl', category: 'BICEPS', muscleGroup: 'Biceps', secondaryMuscles: 'Brachialis, Forearms', equipment: 'DUMBBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Palms facing each other, curl dumbbells smoothly.' },
+    { name: 'Tricep Rope Pushdown', category: 'TRICEPS', muscleGroup: 'Triceps', secondaryMuscles: 'None', equipment: 'CABLE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Push cable downward and spread rope tips at bottom of movement.' },
+    { name: 'Barbell Back Squat', category: 'QUADRICEPS', muscleGroup: 'Quadriceps', secondaryMuscles: 'Glutes, Core, Lower Back', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Squat hips back and down until thighs are parallel to ground, then drive up through mid-foot.' },
+    { name: 'Leg Press', category: 'QUADRICEPS', muscleGroup: 'Quadriceps', secondaryMuscles: 'Glutes', equipment: 'MACHINE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Press platform away smoothly without fully locking knees at peak.' },
+    { name: 'Bulgarian Split Squat', category: 'QUADRICEPS', muscleGroup: 'Quadriceps', secondaryMuscles: 'Glutes, Calves', equipment: 'DUMBBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Rear foot elevated on bench, lower front thigh until parallel to floor.' },
+    { name: 'Romanian Deadlift', category: 'HAMSTRINGS', muscleGroup: 'Hamstrings', secondaryMuscles: 'Glutes, Lower Back', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Hinge back at hips with soft knees, lowering bar along shins until hamstrings stretch.' },
+    { name: 'Barbell Hip Thrust', category: 'GLUTES', muscleGroup: 'Glutes', secondaryMuscles: 'Hamstrings', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Upper back on bench, drive hips up to ceiling until torso and thighs form straight line.' },
+    { name: 'Standing Calf Raise', category: 'CALVES', muscleGroup: 'Calves', secondaryMuscles: 'None', equipment: 'MACHINE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Raise heels up onto toes, hold peak contraction, and lower slowly.' },
+    { name: 'Hanging Leg Raise', category: 'CORE', muscleGroup: 'Core', secondaryMuscles: 'Hip Flexors', equipment: 'BODYWEIGHT', exerciseType: 'BODYWEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Hang from pullup bar, raise legs up to 90 degrees without swinging.' },
+    { name: 'Plank', category: 'CORE', muscleGroup: 'Core', secondaryMuscles: 'Shoulders, Glutes', equipment: 'BODYWEIGHT', exerciseType: 'DURATION', difficulty: 'BEGINNER', instructions: 'Hold straight pushup or forearm posture with braced abdomen.' },
+    { name: 'Treadmill Running', category: 'CARDIO', muscleGroup: 'Full Body', secondaryMuscles: 'Legs, Heart', equipment: 'MACHINE', exerciseType: 'DISTANCE_DURATION', difficulty: 'BEGINNER', instructions: 'Cardiovascular endurance training on running belt.' },
+  ];
+
+  for (const ex of exercises) {
+    await prisma.exercise.upsert({
+      where: { name: ex.name },
+      update: {
+        category: ex.category,
+        muscleGroup: ex.muscleGroup,
+        secondaryMuscles: ex.secondaryMuscles,
+        equipment: ex.equipment,
+        exerciseType: ex.exerciseType,
+        difficulty: ex.difficulty,
+        instructions: ex.instructions,
+      },
+      create: ex,
+    });
+  }
+  console.log('✓ Exercise catalog seeded (' + exercises.length + ' exercises).');
+
+  // 13. Indian & Tamil Nadu Food Database Seeding
+  const foods = [
+    { name: 'Idli (2 pieces)', category: 'MEALS', servingSize: 100, servingUnit: 'piece', calories: 130, proteinGrams: 4.2, carbGrams: 28, fatGrams: 0.4, fibreGrams: 2.5, isIndianTraditional: true, region: 'Tamil Nadu' },
+    { name: 'Plain Dosa', category: 'MEALS', servingSize: 100, servingUnit: 'piece', calories: 168, proteinGrams: 3.8, carbGrams: 29, fatGrams: 3.7, fibreGrams: 1.2, isIndianTraditional: true, region: 'Tamil Nadu' },
+    { name: 'Masala Dosa', category: 'MEALS', servingSize: 150, servingUnit: 'piece', calories: 245, proteinGrams: 5.2, carbGrams: 38, fatGrams: 8.5, fibreGrams: 3.0, isIndianTraditional: true, region: 'Tamil Nadu' },
+    { name: 'Ven Pongal (1 cup)', category: 'MEALS', servingSize: 150, servingUnit: 'cup', calories: 220, proteinGrams: 6.5, carbGrams: 34, fatGrams: 7.0, fibreGrams: 3.0, isIndianTraditional: true, region: 'Tamil Nadu' },
+    { name: 'South Indian Sambar (1 cup)', category: 'MEALS', servingSize: 200, servingUnit: 'cup', calories: 130, proteinGrams: 5.0, carbGrams: 22, fatGrams: 2.5, fibreGrams: 4.5, isIndianTraditional: true, region: 'Tamil Nadu' },
+    { name: 'Coconut Chutney (2 tbsp)', category: 'SNACKS', servingSize: 40, servingUnit: 'tbsp', calories: 95, proteinGrams: 1.0, carbGrams: 3.0, fatGrams: 9.0, fibreGrams: 1.5, isIndianTraditional: true, region: 'Tamil Nadu' },
+    { name: 'Medu Vada (1 piece)', category: 'SNACKS', servingSize: 50, servingUnit: 'piece', calories: 145, proteinGrams: 4.5, carbGrams: 15, fatGrams: 7.5, fibreGrams: 2.0, isIndianTraditional: true, region: 'Tamil Nadu' },
+    { name: 'Curd Rice (1 bowl)', category: 'MEALS', servingSize: 200, servingUnit: 'bowl', calories: 240, proteinGrams: 6.5, carbGrams: 38, fatGrams: 7.0, fibreGrams: 1.5, isIndianTraditional: true, region: 'South Indian' },
+    { name: 'Rasam (1 cup)', category: 'BEVERAGES', servingSize: 150, servingUnit: 'cup', calories: 60, proteinGrams: 1.8, carbGrams: 9.0, fatGrams: 1.5, fibreGrams: 1.2, isIndianTraditional: true, region: 'Tamil Nadu' },
+    { name: 'Cooked White Rice (1 cup)', category: 'GRAINS', servingSize: 150, servingUnit: 'cup', calories: 195, proteinGrams: 4.0, carbGrams: 44, fatGrams: 0.4, fibreGrams: 0.6, isIndianTraditional: true, region: 'Pan-Indian' },
+    { name: 'Brown Rice (1 cup)', category: 'GRAINS', servingSize: 150, servingUnit: 'cup', calories: 165, proteinGrams: 3.5, carbGrams: 35, fatGrams: 1.5, fibreGrams: 2.5, isIndianTraditional: true, region: 'Pan-Indian' },
+    { name: 'Whole Wheat Chapati / Roti', category: 'GRAINS', servingSize: 40, servingUnit: 'piece', calories: 104, proteinGrams: 3.2, carbGrams: 20, fatGrams: 1.2, fibreGrams: 3.5, isIndianTraditional: true, region: 'North Indian' },
+    { name: 'Dal Tadka / Yellow Dal', category: 'PROTEIN', servingSize: 180, servingUnit: 'cup', calories: 165, proteinGrams: 9.0, carbGrams: 24, fatGrams: 3.5, fibreGrams: 5.0, isIndianTraditional: true, region: 'Pan-Indian' },
+    { name: 'Paneer (Raw Cottage Cheese)', category: 'PROTEIN', servingSize: 100, servingUnit: 'g', calories: 265, proteinGrams: 18.5, carbGrams: 4.0, fatGrams: 20.0, fibreGrams: 0.0, isIndianTraditional: true, region: 'Pan-Indian' },
+    { name: 'Palak Paneer', category: 'MEALS', servingSize: 200, servingUnit: 'cup', calories: 230, proteinGrams: 12.0, carbGrams: 8.0, fatGrams: 16.0, fibreGrams: 4.0, isIndianTraditional: true, region: 'North Indian' },
+    { name: 'Boiled Whole Egg', category: 'PROTEIN', servingSize: 50, servingUnit: 'piece', calories: 72, proteinGrams: 6.3, carbGrams: 0.4, fatGrams: 4.8, fibreGrams: 0.0, isIndianTraditional: false, region: null },
+    { name: 'Egg Whites (100g)', category: 'PROTEIN', servingSize: 100, servingUnit: 'g', calories: 52, proteinGrams: 11.0, carbGrams: 0.7, fatGrams: 0.2, fibreGrams: 0.0, isIndianTraditional: false, region: null },
+    { name: 'Grilled Chicken Breast', category: 'PROTEIN', servingSize: 100, servingUnit: 'g', calories: 165, proteinGrams: 31.0, carbGrams: 0.0, fatGrams: 3.6, fibreGrams: 0.0, isIndianTraditional: false, region: null },
+    { name: 'South Indian Chicken Curry', category: 'MEALS', servingSize: 200, servingUnit: 'cup', calories: 260, proteinGrams: 24.0, carbGrams: 6.0, fatGrams: 15.0, fibreGrams: 2.0, isIndianTraditional: true, region: 'South Indian' },
+    { name: 'Soya Chunks (dry 50g)', category: 'PROTEIN', servingSize: 50, servingUnit: 'g', calories: 172, proteinGrams: 26.0, carbGrams: 16.0, fatGrams: 0.5, fibreGrams: 6.5, isIndianTraditional: true, region: 'Pan-Indian' },
+    { name: 'Tofu (Firm)', category: 'PROTEIN', servingSize: 100, servingUnit: 'g', calories: 76, proteinGrams: 8.0, carbGrams: 1.9, fatGrams: 4.8, fibreGrams: 1.2, isIndianTraditional: false, region: null },
+    { name: 'Curd / Plain Yogurt', category: 'DAIRY', servingSize: 150, servingUnit: 'cup', calories: 90, proteinGrams: 5.5, carbGrams: 7.0, fatGrams: 4.5, fibreGrams: 0.0, isIndianTraditional: true, region: 'Pan-Indian' },
+    { name: 'Cow Milk (1 glass)', category: 'DAIRY', servingSize: 200, servingUnit: 'ml', calories: 122, proteinGrams: 6.4, carbGrams: 9.6, fatGrams: 6.5, fibreGrams: 0.0, isIndianTraditional: true, region: 'Pan-Indian' },
+    { name: 'Banana (1 medium)', category: 'FRUITS', servingSize: 118, servingUnit: 'piece', calories: 105, proteinGrams: 1.3, carbGrams: 27, fatGrams: 0.3, fibreGrams: 3.1, isIndianTraditional: false, region: null },
+    { name: 'Apple (1 medium)', category: 'FRUITS', servingSize: 150, servingUnit: 'piece', calories: 78, proteinGrams: 0.4, carbGrams: 20, fatGrams: 0.2, fibreGrams: 3.6, isIndianTraditional: false, region: null },
+    { name: 'Rolled Oats (dry)', category: 'GRAINS', servingSize: 40, servingUnit: 'g', calories: 150, proteinGrams: 5.0, carbGrams: 27, fatGrams: 2.5, fibreGrams: 4.0, isIndianTraditional: false, region: null },
+  ];
+
+  for (const f of foods) {
+    await prisma.food.upsert({
+      where: { name: f.name },
+      update: {
+        category: f.category,
+        servingSize: f.servingSize,
+        servingUnit: f.servingUnit,
+        calories: f.calories,
+        proteinGrams: f.proteinGrams,
+        carbGrams: f.carbGrams,
+        fatGrams: f.fatGrams,
+        fibreGrams: f.fibreGrams,
+        isIndianTraditional: f.isIndianTraditional,
+        region: f.region,
+      },
+      create: f,
+    });
+  }
+  console.log('✓ Food database seeded (' + foods.length + ' items, including Tamil Nadu & Indian staples).');
+
   console.log('--- SEEDING COMPLETED SUCCESSFULLY ---');
 }
 

@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: '/admin/feature-flags', label: 'Feature Controls', icon: '🚩' },
   { href: '/admin/database', label: 'Database & Maintenance', icon: '💾' },
   { href: '/admin/skills', label: 'Skills Catalog', icon: '🧠' },
+  { href: '/admin/fitness', label: 'Fitness & Food Catalog', icon: '🏋️' },
   { href: '/admin/opportunities', label: 'Opportunities & Vetting', icon: '💼' },
   { href: '/admin/audit-logs', label: 'Platform Audit Logs', icon: '📜' },
   { href: '/admin/configs', label: 'Platform Settings', icon: '⚙️' },

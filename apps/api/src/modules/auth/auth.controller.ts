@@ -25,6 +25,22 @@ import {
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  private setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('ees_access_token', accessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 15 * 60 * 1000, // 15 mins
+    });
+    res.cookie('ees_refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+  }
+
   private setRefreshCookie(res: Response, token: string) {
     const isProduction = process.env.NODE_ENV === 'production';
     res.cookie('ees_refresh_token', token, {
@@ -44,7 +60,7 @@ export class AuthController {
     const ip = req.ip || req.socket.remoteAddress;
     const result = await this.authService.register(input, ip);
 
-    this.setRefreshCookie(res, result.refreshToken);
+    this.setAuthCookies(res, result.accessToken, result.refreshToken);
 
     return result;
   }
@@ -59,7 +75,7 @@ export class AuthController {
     const ip = req.ip || req.socket.remoteAddress;
     const result = await this.authService.login(input, ip);
 
-    this.setRefreshCookie(res, result.refreshToken);
+    this.setAuthCookies(res, result.accessToken, result.refreshToken);
 
     return result;
   }
@@ -96,7 +112,7 @@ export class AuthController {
     const token = req.cookies?.ees_refresh_token || body?.refreshToken;
     const result = await this.authService.refreshToken(token);
 
-    this.setRefreshCookie(res, result.refreshToken);
+    this.setAuthCookies(res, result.accessToken, result.refreshToken);
 
     return result;
   }
@@ -108,6 +124,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Invalidate active sessions and refresh tokens' })
   async logout(@CurrentUser('id') userId: string, @Res({ passthrough: true }) res: Response) {
     const isProduction = process.env.NODE_ENV === 'production';
+    res.clearCookie('ees_access_token', {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+    });
     res.clearCookie('ees_refresh_token', {
       httpOnly: true,
       secure: isProduction,

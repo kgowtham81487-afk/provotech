@@ -9,6 +9,7 @@ import { EngageModule } from './modules/engage/engage.module';
 import { ScaleModule } from './modules/scale/scale.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { FitnessModule } from './modules/fitness/fitness.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AdminModule } from './modules/admin/admin.module';
     ScaleModule,
     AiModule,
     AdminModule,
+    FitnessModule,
   ],
 })
 export class AppModule {}

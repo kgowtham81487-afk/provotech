@@ -22,13 +22,20 @@ export class JwtAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const authHeader = request.headers.authorization;
+    let token: string | undefined;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Authentication token required.');
+    const authHeader = request.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1]?.trim();
+    } else if (request.cookies?.ees_access_token) {
+      token = request.cookies.ees_access_token;
+    } else if (request.cookies?.access_token) {
+      token = request.cookies.access_token;
     }
 
-    const token = authHeader.split(' ')[1];
+    if (!token) {
+      throw new UnauthorizedException('Authentication token required.');
+    }
     const jwtSecret = process.env.JWT_SECRET || 'dev-ees-jwt-super-secret-key-32charsmin';
 
     let payload: any;

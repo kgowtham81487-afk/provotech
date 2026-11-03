@@ -156,6 +156,27 @@ export default function EvolvePage() {
 
   return (
     <div className="container mx-auto px-4 sm:px-6 py-8 max-w-7xl">
+      {/* Primary Section Switcher: Skill Development vs Fitness & Wellness */}
+      <div className="mb-6 flex flex-wrap items-center gap-2 rounded-2xl border border-surface-border bg-surface-elevated/70 p-1.5 shadow-sm">
+        <Link
+          href="/evolve"
+          className="flex items-center gap-2 rounded-xl bg-evolve px-4 py-2 text-xs font-bold text-slate-950 shadow"
+        >
+          <BookOpen className="h-4 w-4" />
+          <span>Skill Development</span>
+        </Link>
+        <Link
+          href="/evolve/fitness"
+          className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-surface hover:text-white transition"
+        >
+          <Dumbbell className="h-4 w-4 text-emerald-400" />
+          <span>Fitness & Wellness Hub (Hevy & HealthifyMe)</span>
+          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
+            NEW
+          </span>
+        </Link>
+      </div>
+
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-surface-border">
         <div>
@@ -399,19 +420,44 @@ export default function EvolvePage() {
 
           {/* Tab 3: Specialized Fitness */}
           {activeTab === 'fitness' && (
-            <div className="rounded-2xl border border-surface-border bg-surface p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-base font-bold text-white">Specialized Fitness Module</h2>
-                  <p className="text-xs text-slate-400">Track resistance sessions, sets, repetitions, and personal records.</p>
+            <div className="space-y-6">
+              {/* Promotion banner to standalone hub */}
+              <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 p-6 shadow-xl">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-bold text-emerald-400 border border-emerald-500/30 uppercase tracking-wider">
+                      Standalone Experience Available
+                    </span>
+                    <h2 className="mt-2 text-xl font-extrabold text-white">
+                      EES Dedicated Fitness & Wellness Hub
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-300 max-w-xl">
+                      A complete standalone experience inspired by Hevy & HealthifyMe: Rest timer, routine builder (PPL / Upper-Lower), Brzycki 1RM calculator, Mifflin-St Jeor TDEE nutrition budgets, Indian food diary, and AI Fitness Coach.
+                    </p>
+                  </div>
+                  <Link
+                    href="/evolve/fitness"
+                    className="whitespace-nowrap rounded-xl bg-emerald-500 px-5 py-2.5 text-xs font-bold text-slate-950 hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 transition flex items-center gap-1.5"
+                  >
+                    <span>Launch Fitness Hub</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
                 </div>
-                <button
-                  onClick={() => setShowWorkoutModal(true)}
-                  className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-950"
-                >
-                  Log Workout
-                </button>
               </div>
+
+              <div className="rounded-2xl border border-surface-border bg-surface p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-base font-bold text-white">Quick Resistance Log</h2>
+                    <p className="text-xs text-slate-400">Track resistance sessions, sets, repetitions, and personal records.</p>
+                  </div>
+                  <button
+                    onClick={() => setShowWorkoutModal(true)}
+                    className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-950"
+                  >
+                    Log Workout
+                  </button>
+                </div>
 
               {data?.recentWorkouts && data.recentWorkouts.length > 0 ? (
                 <div className="space-y-4">
@@ -435,6 +481,7 @@ export default function EvolvePage() {
               ) : (
                 <p className="text-xs text-slate-500 italic">No workouts recorded yet.</p>
               )}
+              </div>
             </div>
           )}
 

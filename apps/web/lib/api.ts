@@ -40,12 +40,44 @@ export async function apiRequest<T = any>(
 
   try {
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    const res = await fetch(`${API_BASE}${cleanEndpoint}`, {
+    let res = await fetch(`${API_BASE}${cleanEndpoint}`, {
       ...options,
       headers,
       body,
       credentials: 'include',
     });
+
+    // If 401 Unauthorized occurs on a non-auth endpoint, attempt one-time silent refresh via refresh token cookie
+    if (res.status === 401 && !endpoint.includes('/auth/')) {
+      try {
+        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+        if (refreshRes.ok) {
+          const refreshJson = await refreshRes.json();
+          const newToken = refreshJson?.data?.accessToken || refreshJson?.accessToken;
+          if (newToken) {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('ees_access_token', newToken);
+            }
+            headers.set('Authorization', `Bearer ${newToken}`);
+            // Retry the original request
+            res = await fetch(`${API_BASE}${cleanEndpoint}`, {
+              ...options,
+              headers,
+              body,
+              credentials: 'include',
+            });
+          }
+        } else if (typeof window !== 'undefined') {
+          localStorage.removeItem('ees_access_token');
+        }
+      } catch {
+        // Silent refresh failed, proceed to return original 401 error
+      }
+    }
 
     const json = await res.json().catch(() => null);
 
@@ -77,7 +109,7 @@ export async function apiRequest<T = any>(
 }
 
 export const api = {
-  get: async (endpoint: string, options: { params?: Record<string, any>; headers?: HeadersInit } = {}) => {
+  get: async <T = any>(endpoint: string, options: { params?: Record<string, any>; headers?: HeadersInit } = {}): Promise<ApiResponse<T>> => {
     let url = endpoint;
     if (options.params) {
       const searchParams = new URLSearchParams();
@@ -89,12 +121,12 @@ export const api = {
       const qs = searchParams.toString();
       if (qs) url += (url.includes('?') ? '&' : '?') + qs;
     }
-    const res = await apiRequest(url, { method: 'GET', headers: options.headers });
+    const res = await apiRequest<T>(url, { method: 'GET', headers: options.headers });
     if (!res.success) throw new Error(res.error?.message || 'Request failed');
     return res;
   },
-  post: async (endpoint: string, body?: any, options: { headers?: HeadersInit } = {}) => {
-    const res = await apiRequest(endpoint, {
+  post: async <T = any>(endpoint: string, body?: any, options: { headers?: HeadersInit } = {}): Promise<ApiResponse<T>> => {
+    const res = await apiRequest<T>(endpoint, {
       method: 'POST',
       body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
       headers: options.headers,
@@ -102,8 +134,17 @@ export const api = {
     if (!res.success) throw new Error(res.error?.message || 'Request failed');
     return res;
   },
-  patch: async (endpoint: string, body?: any, options: { headers?: HeadersInit } = {}) => {
-    const res = await apiRequest(endpoint, {
+  put: async <T = any>(endpoint: string, body?: any, options: { headers?: HeadersInit } = {}): Promise<ApiResponse<T>> => {
+    const res = await apiRequest<T>(endpoint, {
+      method: 'PUT',
+      body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+      headers: options.headers,
+    });
+    if (!res.success) throw new Error(res.error?.message || 'Request failed');
+    return res;
+  },
+  patch: async <T = any>(endpoint: string, body?: any, options: { headers?: HeadersInit } = {}): Promise<ApiResponse<T>> => {
+    const res = await apiRequest<T>(endpoint, {
       method: 'PATCH',
       body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
       headers: options.headers,
@@ -111,8 +152,8 @@ export const api = {
     if (!res.success) throw new Error(res.error?.message || 'Request failed');
     return res;
   },
-  delete: async (endpoint: string, options: { headers?: HeadersInit } = {}) => {
-    const res = await apiRequest(endpoint, {
+  delete: async <T = any>(endpoint: string, options: { headers?: HeadersInit } = {}): Promise<ApiResponse<T>> => {
+    const res = await apiRequest<T>(endpoint, {
       method: 'DELETE',
       headers: options.headers,
     });

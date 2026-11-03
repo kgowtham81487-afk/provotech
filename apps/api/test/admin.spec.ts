@@ -60,7 +60,19 @@ describe('Super Admin & Security Unit Tests', () => {
       }),
     };
 
-    adminService = new AdminService(mockPrisma as unknown as PrismaService);
+    const mockFallbackEngine = {
+      executeWithFallback: vi.fn(),
+      getProviderStatuses: vi.fn(),
+      testProvider: vi.fn(),
+      updateProviderConfiguration: vi.fn(),
+      setFallbackEnabled: vi.fn(),
+      restoreDefaultProviderOrder: vi.fn(),
+    };
+
+    adminService = new AdminService(
+      mockPrisma as unknown as PrismaService,
+      mockFallbackEngine as any,
+    );
     authService = new AuthService(mockPrisma as unknown as PrismaService);
   });
 

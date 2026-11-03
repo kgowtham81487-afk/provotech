@@ -93,6 +93,67 @@ Rules for Opportunity Guidance:
 2. If the user asks which opportunities fit their skillset, match against their recorded skills: ${existingSkills}.
 3. Provide objective eligibility gap analysis: tell the user exactly which skills they still need to master before applying.
 4. Advise on crafting strong technical cover notes and presenting GitHub repository proofs.`;
+    } else if (moduleName === 'FITNESS' || context?.route?.includes('/fitness')) {
+      const [profile, recentWorkouts, topPrs, todayFood] = await Promise.all([
+        this.prisma.fitnessProfile.findUnique({ where: { userId } }),
+        this.prisma.workoutSession.findMany({
+          where: { userId },
+          take: 4,
+          orderBy: { createdAt: 'desc' },
+          include: { sets: { include: { exercise: true } } },
+        }),
+        this.prisma.exercisePersonalRecord.findMany({
+          where: { userId },
+          take: 6,
+          orderBy: { achievedAt: 'desc' },
+          include: { exercise: true },
+        }),
+        this.prisma.foodDiaryEntry.findMany({
+          where: {
+            userId,
+            loggedDate: {
+              gte: new Date(new Date().setHours(0, 0, 0, 0)),
+              lte: new Date(new Date().setHours(23, 59, 59, 999)),
+            },
+          },
+        }),
+      ]);
+
+      const workoutsSummary =
+        recentWorkouts.length > 0
+          ? recentWorkouts
+              .map(
+                (w) =>
+                  `• ${w.title} (${w.durationMinutes}m, Total Volume: ${w.totalVolumeKg}kg) on ${w.createdAt.toLocaleDateString()}\n  Sets: ${w.sets.map((s) => `${s.exercise.name} ${s.weightKg}kg×${s.reps}`).slice(0, 6).join(', ')}`,
+              )
+              .join('\n')
+          : 'No workouts logged yet.';
+
+      const prsSummary =
+        topPrs.length > 0
+          ? topPrs.map((p) => `• ${p.exercise.name}: ${p.value} ${p.unit} (${p.recordType})`).join('\n')
+          : 'No personal records recorded yet.';
+
+      const calsToday = Math.round(todayFood.reduce((sum, f) => sum + f.calories, 0));
+      const proteinToday = Math.round(todayFood.reduce((sum, f) => sum + f.proteinGrams, 0) * 10) / 10;
+      const carbsToday = Math.round(todayFood.reduce((sum, f) => sum + f.carbGrams, 0) * 10) / 10;
+      const fatToday = Math.round(todayFood.reduce((sum, f) => sum + f.fatGrams, 0) * 10) / 10;
+
+      moduleSpecificSection = `
+### MODULE FOCUS: FITNESS & WELLNESS COACH (HEVY & HEALTHIFYME ENGINE)
+You are the authorized intelligent Fitness & Nutrition Coach for EES.
+- User Profile: ${profile?.currentWeightKg || 'N/A'} kg (Target: ${profile?.targetWeightKg || 'N/A'} kg) | Goal: ${profile?.fitnessGoal || 'General Fitness'} | Diet: ${profile?.dietaryPreference || 'Any'}
+- Today's Nutrition Consumed: ${calsToday} / ${profile?.dailyCalorieTarget || 2200} kcal (Protein: ${proteinToday}g / ${profile?.proteinGramsTarget || 140}g, Carbs: ${carbsToday}g / ${profile?.carbGramsTarget || 250}g, Fat: ${fatToday}g / ${profile?.fatGramsTarget || 65}g)
+- Top Personal Records (PRs):
+${prsSummary}
+- Recent Workouts Logged:
+${workoutsSummary}
+
+Rules for Fitness Guidance:
+1. Ground all feedback in the user's REAL workout logs and nutrition consumed above.
+2. Emphasize progressive overload (gradual increases in weight, reps, or volume).
+3. If recommending foods to fulfill remaining protein/calorie targets, suggest appropriate traditional Indian / Tamil Nadu options (such as Idli, Dosa, Pongal, Sambar, Paneer, Dal, Eggs, Chicken) matching their dietary preference.
+4. Never diagnose medical conditions or recommend extreme unscientific starvation diets.`;
     } else if (moduleName === 'EVOLVE' || context?.route?.includes('/evolve')) {
       const learningGoals = await this.prisma.learningGoal.findMany({
         where: { userId },
