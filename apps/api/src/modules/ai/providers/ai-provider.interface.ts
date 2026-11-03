@@ -77,6 +77,7 @@ export class AiProviderError extends Error {
     public readonly isRetryable: boolean = true,
     public readonly isQuota: boolean = false,
     public readonly category: AiErrorCategory = 'SERVER_OUTAGE',
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'AiProviderError';
@@ -91,15 +92,15 @@ export class AiInvalidConfigurationError extends AiProviderError {
 }
 
 export class AiRateLimitError extends AiProviderError {
-  constructor(provider: AiProviderName, message = 'Rate limit exceeded') {
-    super(message, provider, 429, true, false, 'RATE_LIMITED');
+  constructor(provider: AiProviderName, message = 'Rate limit exceeded', retryAfterSeconds?: number) {
+    super(message, provider, 429, true, false, 'RATE_LIMITED', retryAfterSeconds);
     this.name = 'AiRateLimitError';
   }
 }
 
 export class AiQuotaError extends AiProviderError {
-  constructor(provider: AiProviderName, message = 'Quota exhausted') {
-    super(message, provider, 429, false, true, 'QUOTA_EXHAUSTED');
+  constructor(provider: AiProviderName, message = 'Quota exhausted', retryAfterSeconds?: number) {
+    super(message, provider, 429, false, true, 'QUOTA_EXHAUSTED', retryAfterSeconds);
     this.name = 'AiQuotaError';
   }
 }
@@ -133,8 +134,8 @@ export class AiModelNotFoundError extends AiProviderError {
 }
 
 export class AiServerError extends AiProviderError {
-  constructor(provider: AiProviderName, statusCode = 500, message = 'Provider server error') {
-    super(message, provider, statusCode, true, false, 'SERVER_OUTAGE');
+  constructor(provider: AiProviderName, statusCode = 500, message = 'Provider server error', retryAfterSeconds?: number) {
+    super(message, provider, statusCode, true, false, 'SERVER_OUTAGE', retryAfterSeconds);
     this.name = 'AiServerError';
   }
 }

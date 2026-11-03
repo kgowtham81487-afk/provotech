@@ -75,6 +75,7 @@ describe('AI Multi-Provider Fallback, Context & Admin Security Tests', () => {
         findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue(null),
         upsert: vi.fn(),
+        update: vi.fn(),
       },
       platformConfig: {
         findUnique: vi.fn().mockResolvedValue(null),
@@ -595,11 +596,11 @@ describe('AI Multi-Provider Fallback, Context & Admin Security Tests', () => {
       ).toBe('ACTIVE');
     });
 
-    it('should reset cooldown and allow admin retry on a provider', async () => {
+    it('should reset cooldown and allow admin retry on a provider without falsely marking healthy', async () => {
       mockPrisma.aIProviderHealth.upsert.mockResolvedValue({
         id: 'health-1',
         provider: 'GEMINI',
-        isHealthy: true,
+        isHealthy: false,
         cooldownUntil: null,
       });
 
@@ -607,7 +608,7 @@ describe('AI Multi-Provider Fallback, Context & Admin Security Tests', () => {
       expect(mockPrisma.aIProviderHealth.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { provider: 'GEMINI' },
-          update: expect.objectContaining({ cooldownUntil: null, isHealthy: true }),
+          update: expect.objectContaining({ cooldownUntil: null, consecutiveErrors: 0 }),
         }),
       );
 
@@ -622,6 +623,201 @@ describe('AI Multi-Provider Fallback, Context & Admin Security Tests', () => {
       expect(groq.getEffectiveTokenLimit('llama3-70b-8192', 4096)).toBe(512);
       expect(groq.getEffectiveTokenLimit('llama-3.1-8b-instant', 2048)).toBe(2048);
       expect(groq.getEffectiveTokenLimit('mixtral-8x7b-32768', 2048)).toBe(1024);
+    });
+  });
+
+  describe('Scenario 7: Cooldown State Machine, Bounded Exponential Backoff & Expiration Recovery', () => {
+    it('1 & 2 & 3. should calculate bounded exponential backoff with jitter and respect Retry-After', () => {
+      // 1st failure: 30s base (+ 0-5s jitter)
+      const cd1 = fallbackEngine.calculateCooldownSeconds(1);
+      expect(cd1).toBeGreaterThanOrEqual(30);
+      expect(cd1).toBeLessThanOrEqual(35);
+
+      // 2nd failure: 60s base (+ 0-5s jitter)
+      const cd2 = fallbackEngine.calculateCooldownSeconds(2);
+      expect(cd2).toBeGreaterThanOrEqual(60);
+      expect(cd2).toBeLessThanOrEqual(65);
+
+      // 3rd failure: 120s base (+ 0-5s jitter)
+      const cd3 = fallbackEngine.calculateCooldownSeconds(3);
+      expect(cd3).toBeGreaterThanOrEqual(120);
+      expect(cd3).toBeLessThanOrEqual(125);
+
+      // 4th failure: 240s base (+ 0-5s jitter)
+      const cd4 = fallbackEngine.calculateCooldownSeconds(4);
+      expect(cd4).toBeGreaterThanOrEqual(240);
+      expect(cd4).toBeLessThanOrEqual(245);
+
+      // Bounded by 900s (15 minutes) maximum
+      const cd10 = fallbackEngine.calculateCooldownSeconds(10);
+      expect(cd10).toBeLessThanOrEqual(905);
+
+      // Respects provider-supplied Retry-After header
+      const cdWithHeader = fallbackEngine.calculateCooldownSeconds(1, 180);
+      expect(cdWithHeader).toBeGreaterThanOrEqual(180);
+    });
+
+    it('4. should skip provider when cooldown has not expired and cascade to next', async () => {
+      const futureCooldown = new Date(Date.now() + 120000); // 2 minutes in future
+      mockPrisma.aIProviderHealth.findUnique.mockResolvedValueOnce({
+        provider: 'GEMINI',
+        isHealthy: false,
+        cooldownUntil: futureCooldown,
+        lastErrorMessage: '[RATE_LIMITED] Too many requests',
+      });
+
+      vi.mocked(mockDeepSeek.generate).mockResolvedValueOnce({
+        content: 'Fallback response from DeepSeek',
+        provider: 'DEEPSEEK',
+        model: 'deepseek-chat',
+        totalTokens: 50,
+        latencyMs: 150,
+      });
+
+      const res = await fallbackEngine.executeWithFallback([
+        { role: 'user', content: 'Test active cooldown skip' },
+      ]);
+
+      expect(res.fallbackOccurred).toBe(true);
+      expect(res.result.provider).toBe('DEEPSEEK');
+      expect(mockGemini.generate).not.toHaveBeenCalled();
+      expect(mockDeepSeek.generate).toHaveBeenCalled();
+    });
+
+    it('5 & 6. should auto-recover provider when cooldown has expired and mark HEALTHY on success', async () => {
+      const pastCooldown = new Date(Date.now() - 5000); // Expired 5 seconds ago
+      mockPrisma.aIProviderHealth.findUnique.mockResolvedValueOnce({
+        provider: 'GEMINI',
+        isHealthy: false,
+        cooldownUntil: pastCooldown,
+        lastErrorMessage: '[RATE_LIMITED] Cooldown in past',
+      });
+
+      vi.mocked(mockGemini.generate).mockResolvedValueOnce({
+        content: 'Gemini recovered response',
+        provider: 'GEMINI',
+        model: 'gemini-3-flash-preview',
+        totalTokens: 40,
+        latencyMs: 120,
+      });
+
+      const res = await fallbackEngine.executeWithFallback([
+        { role: 'user', content: 'Test expired cooldown recovery' },
+      ]);
+
+      expect(res.result.provider).toBe('GEMINI');
+      expect(res.result.content).toBe('Gemini recovered response');
+      expect(mockPrisma.aIProviderHealth.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { provider: 'GEMINI' },
+          data: { cooldownUntil: null },
+        }),
+      );
+      expect(mockPrisma.aIProviderHealth.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { provider: 'GEMINI' },
+          update: expect.objectContaining({
+            isHealthy: true,
+            consecutiveErrors: 0,
+            cooldownUntil: null,
+          }),
+        }),
+      );
+    });
+
+    it('7 & 8 & 9 & 10. should set zero cooldown for permanent errors (400, 401, 402, 404)', async () => {
+      // 400 Invalid Configuration
+      await fallbackEngine.handleProviderFailure('GROQ', new Error('max_tokens too high'), 'INVALID_CONFIGURATION', 400);
+      expect(mockPrisma.aIProviderHealth.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { provider: 'GROQ' },
+          update: expect.objectContaining({ cooldownUntil: null }),
+        }),
+      );
+
+      // 401 Authentication Failure
+      await fallbackEngine.handleProviderFailure('GEMINI', new Error('API key invalid'), 'AUTHENTICATION_FAILURE', 401);
+      expect(mockPrisma.aIProviderHealth.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { provider: 'GEMINI' },
+          update: expect.objectContaining({ cooldownUntil: null }),
+        }),
+      );
+
+      // 402 Insufficient Balance
+      await fallbackEngine.handleProviderFailure('DEEPSEEK', new Error('Balance depleted'), 'INSUFFICIENT_BALANCE', 402);
+      expect(mockPrisma.aIProviderHealth.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { provider: 'DEEPSEEK' },
+          update: expect.objectContaining({ cooldownUntil: null }),
+        }),
+      );
+
+      // 404 Model Not Found
+      await fallbackEngine.handleProviderFailure('GEMINI', new Error('Model 404'), 'MODEL_NOT_FOUND', 404);
+      expect(mockPrisma.aIProviderHealth.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { provider: 'GEMINI' },
+          update: expect.objectContaining({ cooldownUntil: null }),
+        }),
+      );
+    });
+
+    it('11 & 12. should apply temporary cooldown with exponential backoff on 429 and 503', async () => {
+      mockPrisma.aIProviderHealth.findUnique.mockResolvedValueOnce({
+        provider: 'GROQ',
+        consecutiveErrors: 1,
+      });
+
+      await fallbackEngine.handleProviderFailure('GROQ', new Error('Rate limit'), 'RATE_LIMITED', 429);
+      expect(mockPrisma.aIProviderHealth.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { provider: 'GROQ' },
+          update: expect.objectContaining({
+            cooldownUntil: expect.any(Date),
+            consecutiveErrors: { increment: 1 },
+          }),
+        }),
+      );
+    });
+
+    it('13 & 14. should invalidate stale health, clear obsolete cooldown and retest when admin updates model', async () => {
+      mockPrisma.aIProviderConfiguration.update.mockResolvedValueOnce({
+        id: 'cfg-groq',
+        provider: 'GROQ',
+        model: 'qwen/qwen3.8-27b',
+      });
+
+      vi.mocked(mockGroq.testConnection).mockResolvedValueOnce({
+        success: true,
+        provider: 'GROQ',
+        model: 'qwen/qwen3.8-27b',
+        latencyMs: 95,
+        httpStatus: 200,
+        responseContent: 'EES AI connection successful.',
+      });
+
+      const updated = await fallbackEngine.updateProviderConfiguration('GROQ', {
+        model: 'qwen/qwen3.8-27b',
+      });
+
+      expect(mockPrisma.aIProviderConfiguration.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { provider: 'GROQ' },
+          data: { model: 'qwen/qwen3.8-27b' },
+        }),
+      );
+      expect(mockPrisma.aIProviderHealth.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { provider: 'GROQ' },
+          update: expect.objectContaining({ cooldownUntil: null, consecutiveErrors: 0 }),
+        }),
+      );
+      expect(mockGroq.testConnection).toHaveBeenCalledWith('qwen/qwen3.8-27b', expect.any(String));
+    });
+
+    it('15. should keep disabled provider disabled even if cooldown is null/expired', async () => {
+      expect(fallbackEngine.computeHealthState(false, true, { cooldownUntil: null } as any)).toBe('DISABLED');
     });
   });
 });

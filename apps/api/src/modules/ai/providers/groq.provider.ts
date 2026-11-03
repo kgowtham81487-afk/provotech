@@ -134,6 +134,8 @@ export class GroqProvider implements AiProvider {
       if (!response.ok) {
         const errorMsg = data?.error?.message || response.statusText || 'Groq request failed';
         const status = response.status;
+        const retryAfterHeader = response.headers.get('retry-after');
+        const retryAfterSeconds = retryAfterHeader && !isNaN(parseInt(retryAfterHeader, 10)) ? parseInt(retryAfterHeader, 10) : undefined;
 
         if (status === 400) {
           throw new AiInvalidConfigurationError(
@@ -155,14 +157,14 @@ export class GroqProvider implements AiProvider {
         }
         if (status === 429) {
           if (errorMsg.toLowerCase().includes('quota')) {
-            throw new AiQuotaError(this.name, `Groq Quota Exhausted: ${errorMsg}`);
+            throw new AiQuotaError(this.name, `Groq Quota Exhausted: ${errorMsg}`, retryAfterSeconds);
           }
-          throw new AiRateLimitError(this.name, `Groq Rate Limit Exceeded: ${errorMsg}`);
+          throw new AiRateLimitError(this.name, `Groq Rate Limit Exceeded: ${errorMsg}`, retryAfterSeconds);
         }
         if (status >= 500) {
-          throw new AiServerError(this.name, status, `Groq Server Error (${status}): ${errorMsg}`);
+          throw new AiServerError(this.name, status, `Groq Server Error (${status}): ${errorMsg}`, retryAfterSeconds);
         }
-        throw new AiProviderError(`Groq API Error (${status}): ${errorMsg}`, this.name, status);
+        throw new AiProviderError(`Groq API Error (${status}): ${errorMsg}`, this.name, status, true, false, 'SERVER_OUTAGE', retryAfterSeconds);
       }
 
       const text = data?.choices?.[0]?.message?.content;

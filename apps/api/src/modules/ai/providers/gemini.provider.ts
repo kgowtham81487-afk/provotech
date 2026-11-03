@@ -130,6 +130,8 @@ export class GeminiProvider implements AiProvider {
       if (!response.ok) {
         const errorMsg = data?.error?.message || response.statusText || 'Gemini request failed';
         const status = response.status;
+        const retryAfterHeader = response.headers.get('retry-after');
+        const retryAfterSeconds = retryAfterHeader && !isNaN(parseInt(retryAfterHeader, 10)) ? parseInt(retryAfterHeader, 10) : undefined;
 
         if (status === 401) {
           throw new AiAuthError(this.name, `Gemini Authentication Error (401): ${errorMsg}`);
@@ -145,14 +147,14 @@ export class GeminiProvider implements AiProvider {
         }
         if (status === 429) {
           if (errorMsg.toLowerCase().includes('quota')) {
-            throw new AiQuotaError(this.name, `Gemini Quota Exhausted: ${errorMsg}`);
+            throw new AiQuotaError(this.name, `Gemini Quota Exhausted: ${errorMsg}`, retryAfterSeconds);
           }
-          throw new AiRateLimitError(this.name, `Gemini Rate Limit Exceeded: ${errorMsg}`);
+          throw new AiRateLimitError(this.name, `Gemini Rate Limit Exceeded: ${errorMsg}`, retryAfterSeconds);
         }
         if (status >= 500) {
-          throw new AiServerError(this.name, status, `Gemini Server Outage (${status}): ${errorMsg}`);
+          throw new AiServerError(this.name, status, `Gemini Server Outage (${status}): ${errorMsg}`, retryAfterSeconds);
         }
-        throw new AiProviderError(`Gemini API Error (${status}): ${errorMsg}`, this.name, status);
+        throw new AiProviderError(`Gemini API Error (${status}): ${errorMsg}`, this.name, status, true, false, 'SERVER_OUTAGE', retryAfterSeconds);
       }
 
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
