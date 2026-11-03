@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import { PrismaService } from '../../database/prisma.service';
 
 export interface AuthenticatedUser {

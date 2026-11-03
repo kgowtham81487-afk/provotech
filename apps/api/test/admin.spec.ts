@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AdminService } from '../src/modules/admin/admin.service';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { PrismaService } from '../src/database/prisma.service';
-import bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcryptjs';
 
 describe('Super Admin & Security Unit Tests', () => {
   let adminService: AdminService;

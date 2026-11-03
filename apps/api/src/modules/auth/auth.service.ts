@@ -7,9 +7,9 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import * as crypto from 'crypto';
+import * as bcrypt from 'bcryptjs';
+import * as jwt from 'jsonwebtoken';
 import { PrismaService } from '../../database/prisma.service';
 import { RegisterInput, LoginInput, ResetPasswordInput } from '@ees/shared';
 
@@ -136,6 +136,10 @@ export class AuthService {
 
     if (user.status === 'DEACTIVATED' || user.deletedAt) {
       throw new UnauthorizedException('This account has been deactivated.');
+    }
+
+    if (!user.passwordHash) {
+      throw new UnauthorizedException('Invalid email or password.');
     }
 
     const isPasswordValid = await bcrypt.compare(input.password, user.passwordHash);

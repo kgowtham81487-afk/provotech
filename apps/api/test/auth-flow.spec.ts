@@ -5,7 +5,7 @@ import { PrismaService } from '../src/database/prisma.service';
 import { RolesGuard } from '../src/common/guards/roles.guard';
 import { Reflector } from '@nestjs/core';
 import { ExecutionContext, InternalServerErrorException, ConflictException } from '@nestjs/common';
-import bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcryptjs';
 
 describe('Auth & Role Management Tests', () => {
   let authService: AuthService;
@@ -378,6 +378,125 @@ describe('Auth & Role Management Tests', () => {
 
       expect(result).toHaveProperty('accessToken');
       expect(result.user.roles).toContain('STANDARD_USER');
+    });
+  });
+
+  describe('Bcrypt Runtime Interoperability & Admin/User Password Verification', () => {
+    it('should register a new user, verify password is a real bcrypt hash, and verify bcrypt.compare succeeds', async () => {
+      let savedUserRecord: any = null;
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.userProfile.findUnique.mockResolvedValue(null);
+      mockPrisma.role.findUnique.mockResolvedValue({ id: 'role-user-id', name: 'USER' });
+
+      mockPrisma.user.create.mockImplementation(async ({ data }: any) => {
+        savedUserRecord = {
+          id: 'test-registered-id',
+          email: data.email,
+          passwordHash: data.passwordHash,
+          profile: { username: data.profile.create.username, displayName: data.profile.create.displayName },
+          roles: [{ role: { name: 'USER' } }],
+        };
+        return savedUserRecord;
+      });
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+      mockPrisma.auditLog.create.mockResolvedValue({});
+
+      const regResult = await authService.register(
+        {
+          email: 'newtester@provolution.in',
+          password: 'Password@123',
+          displayName: 'New Tester',
+          username: 'new_tester',
+        },
+        '127.0.0.1',
+      );
+
+      expect(regResult).toHaveProperty('accessToken');
+      expect(savedUserRecord).toBeDefined();
+
+      // Verify the stored password is a valid bcrypt hash
+      expect(savedUserRecord.passwordHash).toMatch(/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/);
+      // Verify bcrypt.compare directly with plaintext
+      const isMatch = await bcrypt.compare('Password@123', savedUserRecord.passwordHash);
+      expect(isMatch).toBe(true);
+
+      // Now test login with the correct password using real bcrypt.compare
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...savedUserRecord,
+        status: 'ACTIVE',
+        deletedAt: null,
+      });
+      mockPrisma.user.update.mockResolvedValue({});
+      mockPrisma.session.create.mockResolvedValue({});
+
+      const loginResult = await authService.login(
+        {
+          email: 'newtester@provolution.in',
+          password: 'Password@123',
+        },
+        '127.0.0.1',
+      );
+
+      expect(loginResult).toHaveProperty('accessToken');
+      expect(loginResult.user.email).toBe('newtester@provolution.in');
+    });
+
+    it('should reject login with an incorrect password via bcrypt.compare', async () => {
+      const realHash = await bcrypt.hash('CorrectSecret@123', 12);
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user-auth-check',
+        email: 'tester@provolution.in',
+        passwordHash: realHash,
+        status: 'ACTIVE',
+        deletedAt: null,
+        profile: { username: 'tester', displayName: 'Tester' },
+        roles: [{ role: { name: 'USER' } }],
+      });
+      mockPrisma.auditLog.create.mockResolvedValue({});
+
+      await expect(
+        authService.login(
+          {
+            email: 'tester@provolution.in',
+            password: 'WrongPassword@999',
+          },
+          '127.0.0.1',
+        ),
+      ).rejects.toThrow('Invalid email or password.');
+    });
+
+    it('should verify the seeded Super Administrator can log in with bcrypt verification', async () => {
+      // Seeded credentials: gowthamk81487@gmail.com / Gowtham@123
+      const superAdminEmail = 'gowthamk81487@gmail.com';
+      const superAdminPassword = 'Gowtham@123';
+      const superAdminHash = await bcrypt.hash(superAdminPassword, 12);
+
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'super-admin-uuid-1',
+        email: superAdminEmail,
+        passwordHash: superAdminHash,
+        status: 'ACTIVE',
+        deletedAt: null,
+        profile: { username: 'gowtham_superadmin', displayName: 'Gowtham (Super Admin)' },
+        roles: [{ role: { name: 'SUPER_ADMIN' } }],
+      });
+      mockPrisma.user.update.mockResolvedValue({});
+      mockPrisma.refreshToken.create.mockResolvedValue({});
+      mockPrisma.session.create.mockResolvedValue({});
+      mockPrisma.auditLog.create.mockResolvedValue({});
+
+      const result = await authService.login(
+        {
+          email: superAdminEmail,
+          password: superAdminPassword,
+        },
+        '127.0.0.1',
+      );
+
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+      expect(result.user.email).toBe(superAdminEmail);
+      expect(result.user.roles).toContain('SUPER_ADMIN');
     });
   });
 
