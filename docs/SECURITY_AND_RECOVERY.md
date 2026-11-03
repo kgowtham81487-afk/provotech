@@ -80,3 +80,4 @@ All security-sensitive operations are captured in the PostgreSQL `AuditLog` tabl
 - `DATABASE_MAINTENANCE_TRIGGERED`
 
 Each record captures the actor's ID, action, entity type, target ID, remote IP address, timestamp, and metadata payload.
+

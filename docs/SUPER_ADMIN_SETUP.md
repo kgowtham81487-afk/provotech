@@ -84,3 +84,4 @@ If the Super Administrator account becomes locked or unreachable:
    ```
 3. Authenticate with the emergency password and immediately rotate credentials.
 4. All emergency accesses are recorded in `AuditLog` with remote IP attribution.
+

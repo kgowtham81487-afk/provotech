@@ -24,3 +24,4 @@ export class AiController {
     return this.aiService.brainstormProjects(body.field, body.skills || []);
   }
 }
+

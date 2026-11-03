@@ -61,3 +61,4 @@ In the event of an outage, third-party provider failure, or scheduled maintenanc
 1. Open `/admin/database`.
 2. Inspect table row counts across all 38+ entities.
 3. Click **"Run Database Cleanup"** to purge expired sessions and stale password reset tokens, maintaining query efficiency and database cleanliness.
+

@@ -35,3 +35,4 @@ export class UsersController {
     return this.usersService.getPublicProfile(username);
   }
 }
+

@@ -8,3 +8,4 @@ import { ScaleService } from './scale.service';
   exports: [ScaleService],
 })
 export class ScaleModule {}
+

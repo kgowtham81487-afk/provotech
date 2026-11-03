@@ -336,11 +336,11 @@ async function main() {
       const catRecord = existingCategory
         ? existingCategory
         : await prisma.skillCategory.create({
-            data: {
-              fieldId: fieldRecord.id,
-              name: cat.name,
-            },
-          });
+          data: {
+            fieldId: fieldRecord.id,
+            name: cat.name,
+          },
+        });
 
       for (const skillName of cat.skills) {
         const slug = skillName.toLowerCase().replace(/[^a-z0-9]+/g, '-');

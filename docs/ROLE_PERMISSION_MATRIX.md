@@ -67,3 +67,4 @@ The platform architecture enforces critical invariants in `AdminService.ensureNo
 RBAC is enforced on both backend and frontend layers:
 - **Backend Guard:** `RolesGuard` checking metadata injected by `@Roles(...)` combined with `JwtAuthGuard`.
 - **Frontend Guard:** `AdminLayout` checking `isAdmin` and `isSuperAdmin` flags from `useAuth()`. Unauthorized visits immediately redirect or show the secure Access Denied dialog.
+
