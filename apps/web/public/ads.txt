@@ -1,0 +1,4 @@
+# EES Platform — Google AdSense Authorized Digital Sellers (ads.txt)
+# Organization: Provolution Technologies Pvt. Ltd.
+# Replace pub-PENDING_OWNER_CONFIG with the official Provolution publisher ID once registered.
+google.com, pub-PENDING_OWNER_CONFIG, DIRECT, f08c47fec0942fa0

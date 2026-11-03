@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #0B0F17;
+    color: #F8FAFC;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+}
+
+.stage-evolve-border {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.stage-engage-border {
+  border-color: rgba(6, 182, 212, 0.3);
+}
+
+.stage-scale-border {
+  border-color: rgba(245, 158, 11, 0.3);
+}

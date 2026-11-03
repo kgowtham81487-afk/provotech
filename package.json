@@ -1,0 +1,30 @@
+{
+  "name": "ees-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EES — Evolve, Engage & Scale enterprise platform by Provolution Technologies Pvt. Ltd.",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @ees/web --filter @ees/api dev",
+    "dev:web": "pnpm --filter @ees/web dev",
+    "dev:api": "pnpm --filter @ees/api dev",
+    "build": "pnpm --filter @ees/shared build && pnpm --filter @ees/api build && pnpm --filter @ees/web build",
+    "build:shared": "pnpm --filter @ees/shared build",
+    "build:api": "pnpm --filter @ees/api build",
+    "build:web": "pnpm --filter @ees/web build",
+    "typecheck": "pnpm --recursive run typecheck",
+    "test": "pnpm --recursive run test",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "prisma": "^6.3.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "packageManager": "pnpm@12.16.1"
+}
