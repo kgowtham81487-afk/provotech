@@ -15,10 +15,15 @@ import {
   AdminFeatureFlagUpdateInput,
   CreateOpportunityInput,
 } from '@ees/shared';
+import { FallbackEngineService } from '../ai/fallback-engine.service';
+import { AiProviderName } from '../ai/providers/ai-provider.interface';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly fallbackEngine: FallbackEngineService,
+  ) {}
 
   async getPlatformStats() {
     const [
@@ -751,6 +756,421 @@ export class AdminService {
     });
 
     return updatedApp;
+  }
+
+  // ==========================================
+  // AI CONTROLS & MONITORING
+  // ==========================================
+
+  async getAiConfig() {
+    return this.fallbackEngine.getProviderStatusOverview();
+  }
+
+  async updateAiConfig(
+    provider: AiProviderName,
+    updates: any,
+    actorId: string,
+    ipAddress?: string,
+  ) {
+    const updated = await this.fallbackEngine.updateProviderConfiguration(provider, updates);
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: 'AI_CONFIG_UPDATED',
+        entityType: 'AIProviderConfiguration',
+        entityId: updated.id,
+        ipAddress,
+        metadata: { provider, updates },
+      },
+    });
+    return updated;
+  }
+
+  async setAiFallbackEnabled(enabled: boolean, actorId: string, ipAddress?: string) {
+    const updated = await this.fallbackEngine.setFallbackEnabled(enabled);
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: 'AI_FALLBACK_TOGGLED',
+        entityType: 'PlatformConfig',
+        entityId: updated.id,
+        ipAddress,
+        metadata: { enabled },
+      },
+    });
+    return updated;
+  }
+
+  async testAiProvider(provider: AiProviderName) {
+    return this.fallbackEngine.testProvider(provider);
+  }
+
+  async resetAiDefaults(actorId: string, ipAddress?: string) {
+    await this.fallbackEngine.restoreDefaultProviderOrder();
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: 'AI_CONFIG_RESET_DEFAULTS',
+        entityType: 'AIProviderConfiguration',
+        entityId: 'SYSTEM',
+        ipAddress,
+        metadata: { resetTo: 'Gemini -> DeepSeek -> Groq' },
+      },
+    });
+    return { message: 'AI provider settings restored to defaults (Gemini -> DeepSeek -> Groq).' };
+  }
+
+  // ==========================================
+  // SKILLS MANAGEMENT (CRUD)
+  // ==========================================
+
+  async listSkills(params: { search?: string; categoryId?: string; page?: number; limit?: number } = {}) {
+    const page = Math.max(1, Number(params.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(params.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (params.categoryId) where.categoryId = params.categoryId;
+    if (params.search) {
+      where.OR = [
+        { name: { contains: params.search, mode: 'insensitive' } },
+        { slug: { contains: params.search, mode: 'insensitive' } },
+        { description: { contains: params.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.skill.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { name: 'asc' },
+        include: {
+          category: {
+            include: { field: true },
+          },
+          _count: {
+            select: { userSkills: true, opportunitySkills: true },
+          },
+        },
+      }),
+      this.prisma.skill.count({ where }),
+    ]);
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getSkill(id: string) {
+    const skill = await this.prisma.skill.findUnique({
+      where: { id },
+      include: {
+        category: { include: { field: true } },
+        _count: { select: { userSkills: true, opportunitySkills: true } },
+      },
+    });
+    if (!skill) {
+      throw new NotFoundException('Skill not found.');
+    }
+    return skill;
+  }
+
+  async createSkill(
+    input: { name: string; slug?: string; categoryId: string; description?: string; isActive?: boolean },
+    actorId: string,
+    ipAddress?: string,
+  ) {
+    const name = input.name.trim();
+    const slug = (input.slug?.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')).toLowerCase();
+
+    const existing = await this.prisma.skill.findUnique({ where: { slug } });
+    if (existing) {
+      throw new ConflictException(`A skill with slug '${slug}' already exists.`);
+    }
+
+    const skill = await this.prisma.skill.create({
+      data: {
+        name,
+        slug,
+        categoryId: input.categoryId,
+        description: input.description?.trim(),
+        isActive: input.isActive ?? true,
+      },
+      include: { category: true },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: 'SKILL_CREATED',
+        entityType: 'Skill',
+        entityId: skill.id,
+        ipAddress,
+        metadata: { name: skill.name, slug: skill.slug, categoryId: input.categoryId },
+      },
+    });
+
+    return skill;
+  }
+
+  async updateSkill(
+    id: string,
+    input: { name?: string; slug?: string; categoryId?: string; description?: string; isActive?: boolean },
+    actorId: string,
+    ipAddress?: string,
+  ) {
+    const existing = await this.prisma.skill.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Skill not found.');
+    }
+
+    let slug = existing.slug;
+    if (input.slug) {
+      slug = input.slug.trim().toLowerCase();
+      if (slug !== existing.slug) {
+        const slugConflict = await this.prisma.skill.findUnique({ where: { slug } });
+        if (slugConflict) {
+          throw new ConflictException(`A skill with slug '${slug}' already exists.`);
+        }
+      }
+    }
+
+    const updated = await this.prisma.skill.update({
+      where: { id },
+      data: {
+        ...(input.name ? { name: input.name.trim() } : {}),
+        ...(input.slug ? { slug } : {}),
+        ...(input.categoryId ? { categoryId: input.categoryId } : {}),
+        ...(input.description !== undefined ? { description: input.description?.trim() } : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+      },
+      include: { category: true },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: 'SKILL_UPDATED',
+        entityType: 'Skill',
+        entityId: id,
+        ipAddress,
+        metadata: { updates: input },
+      },
+    });
+
+    return updated;
+  }
+
+  async deleteSkill(id: string, actorId: string, ipAddress?: string) {
+    const existing = await this.prisma.skill.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Skill not found.');
+    }
+
+    await this.prisma.skill.delete({ where: { id } });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: 'SKILL_DELETED',
+        entityType: 'Skill',
+        entityId: id,
+        ipAddress,
+        metadata: { name: existing.name, slug: existing.slug },
+      },
+    });
+
+    return { message: 'Skill deleted successfully.' };
+  }
+
+  async listSkillCategories() {
+    return this.prisma.skillCategory.findMany({
+      include: { field: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  // ==========================================
+  // OPPORTUNITIES MANAGEMENT (CRUD)
+  // ==========================================
+
+  async listOpportunities(params: { search?: string; type?: string; status?: string; page?: number; limit?: number } = {}) {
+    const page = Math.max(1, Number(params.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(params.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (params.type) where.type = params.type;
+    if (params.status) where.status = params.status;
+    if (params.search) {
+      where.OR = [
+        { title: { contains: params.search, mode: 'insensitive' } },
+        { slug: { contains: params.search, mode: 'insensitive' } },
+        { organization: { contains: params.search, mode: 'insensitive' } },
+        { description: { contains: params.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.opportunity.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          field: true,
+          requiredSkills: { include: { skill: true } },
+          _count: { select: { applications: true, assignments: true } },
+        },
+      }),
+      this.prisma.opportunity.count({ where }),
+    ]);
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getOpportunity(id: string) {
+    const opp = await this.prisma.opportunity.findUnique({
+      where: { id },
+      include: {
+        field: true,
+        requiredSkills: { include: { skill: true } },
+        _count: { select: { applications: true, assignments: true } },
+      },
+    });
+    if (!opp) {
+      throw new NotFoundException('Opportunity not found.');
+    }
+    return opp;
+  }
+
+  async updateOpportunity(
+    id: string,
+    input: any,
+    actorId: string,
+    ipAddress?: string,
+  ) {
+    const existing = await this.prisma.opportunity.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Opportunity not found.');
+    }
+
+    let slug = existing.slug;
+    if (input.slug && input.slug.trim().toLowerCase() !== existing.slug) {
+      slug = input.slug.trim().toLowerCase();
+      const slugConflict = await this.prisma.opportunity.findUnique({ where: { slug } });
+      if (slugConflict) {
+        throw new ConflictException(`An opportunity with slug '${slug}' already exists.`);
+      }
+    }
+
+    const updated = await this.prisma.opportunity.update({
+      where: { id },
+      data: {
+        ...(input.title ? { title: input.title.trim() } : {}),
+        ...(input.slug ? { slug } : {}),
+        ...(input.organization ? { organization: input.organization.trim() } : {}),
+        ...(input.fieldId !== undefined ? { fieldId: input.fieldId } : {}),
+        ...(input.description ? { description: input.description } : {}),
+        ...(input.scope ? { scope: input.scope } : {}),
+        ...(input.type ? { type: input.type } : {}),
+        ...(input.compensationType ? { compensationType: input.compensationType } : {}),
+        ...(input.compensationAmount !== undefined ? { compensationAmount: input.compensationAmount } : {}),
+        ...(input.currency ? { currency: input.currency } : {}),
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.deadline !== undefined ? { deadline: input.deadline ? new Date(input.deadline) : null } : {}),
+      },
+      include: {
+        field: true,
+        requiredSkills: { include: { skill: true } },
+      },
+    });
+
+    if (input.requiredSkillIds && Array.isArray(input.requiredSkillIds)) {
+      // Re-sync required skills
+      await this.prisma.opportunitySkill.deleteMany({ where: { opportunityId: id } });
+      await this.prisma.opportunitySkill.createMany({
+        data: input.requiredSkillIds.map((skillId: string) => ({
+          opportunityId: id,
+          skillId,
+        })),
+      });
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: 'OPPORTUNITY_UPDATED',
+        entityType: 'Opportunity',
+        entityId: id,
+        ipAddress,
+        metadata: { updates: input },
+      },
+    });
+
+    return updated;
+  }
+
+  async deleteOpportunity(id: string, actorId: string, ipAddress?: string) {
+    const existing = await this.prisma.opportunity.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Opportunity not found.');
+    }
+
+    await this.prisma.opportunity.delete({ where: { id } });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: 'OPPORTUNITY_DELETED',
+        entityType: 'Opportunity',
+        entityId: id,
+        ipAddress,
+        metadata: { title: existing.title, slug: existing.slug },
+      },
+    });
+
+    return { message: 'Opportunity deleted successfully.' };
+  }
+
+  async updateOpportunityStatus(id: string, status: any, actorId: string, ipAddress?: string) {
+    const existing = await this.prisma.opportunity.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Opportunity not found.');
+    }
+
+    const updated = await this.prisma.opportunity.update({
+      where: { id },
+      data: { status },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: `OPPORTUNITY_STATUS_${status}`,
+        entityType: 'Opportunity',
+        entityId: id,
+        ipAddress,
+        metadata: { previousStatus: existing.status, newStatus: status },
+      },
+    });
+
+    return updated;
   }
 
   private async ensureNotLastSuperAdmin(userId: string, actionDesc: string) {

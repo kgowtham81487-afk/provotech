@@ -76,6 +76,7 @@ model User {
   moderationActions ModerationAction[]
   auditLogs         AuditLog[]
   blogs             Blog[]
+  aiConversations   AIConversation[]
 
   @@index([email])
   @@index([status])
@@ -216,6 +217,7 @@ model Skill {
   name              String
   slug              String             @unique
   description       String?
+  isActive          Boolean            @default(true)
   userSkills        UserSkill[]
   learningResources LearningResource[]
   opportunitySkills OpportunitySkill[]
@@ -1013,4 +1015,71 @@ model PlatformConfig {
 
   @@index([category])
   @@index([key])
+}
+
+
+// ==========================================
+// 12. AI CONVERSATIONS & PROVIDER CONTROLS
+// ==========================================
+
+model AIConversation {
+  id          String        @id @default(uuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String        @default("New Conversation")
+  module      String        @default("GENERAL") // SKILLS, OPPORTUNITIES, EVOLVE, DASHBOARD, GENERAL
+  isArchived  Boolean       @default(false)
+  messages    AIMessage[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@index([module])
+}
+
+model AIMessage {
+  id               String         @id @default(uuid())
+  conversationId   String
+  conversation     AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role             String         // user, assistant, system
+  content          String         @db.Text
+  provider         String?        // gemini, deepseek, groq, fallback
+  model            String?
+  promptTokens     Int?
+  completionTokens Int?
+  totalTokens      Int?
+  latencyMs        Int?
+  metadata         Json?
+  createdAt        DateTime       @default(now())
+
+  @@index([conversationId, createdAt(sort: Asc)])
+}
+
+model AIProviderConfiguration {
+  id          String   @id @default(uuid())
+  provider    String   @unique // GEMINI, DEEPSEEK, GROQ
+  name        String
+  isEnabled   Boolean  @default(true)
+  isPreferred Boolean  @default(false)
+  priority    Int      @default(1)
+  model       String
+  timeoutMs   Int      @default(30000)
+  maxTokens   Int      @default(2048)
+  temperature Float    @default(0.7)
+  updatedAt   DateTime @updatedAt
+}
+
+model AIProviderHealth {
+  id                 String    @id @default(uuid())
+  provider           String    @unique // GEMINI, DEEPSEEK, GROQ
+  isHealthy          Boolean   @default(true)
+  totalRequests      Int       @default(0)
+  successfulRequests Int       @default(0)
+  failedRequests     Int       @default(0)
+  consecutiveErrors  Int       @default(0)
+  cooldownUntil      DateTime?
+  lastSuccessAt      DateTime?
+  lastFailureAt      DateTime?
+  lastErrorMessage   String?   @db.Text
+  updatedAt          DateTime  @updatedAt
 }

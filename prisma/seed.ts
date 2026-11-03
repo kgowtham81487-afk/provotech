@@ -481,6 +481,66 @@ async function main() {
     console.log('✓ Monetization configuration initialized.');
   }
 
+  // 10. AI Provider Configurations & Health Trackers
+  const aiProviders = [
+    {
+      provider: 'GEMINI',
+      name: 'Google Gemini',
+      isEnabled: true,
+      isPreferred: true,
+      priority: 1,
+      model: 'gemini-1.5-flash',
+      timeoutMs: 30000,
+      maxTokens: 2048,
+      temperature: 0.7,
+    },
+    {
+      provider: 'DEEPSEEK',
+      name: 'DeepSeek',
+      isEnabled: true,
+      isPreferred: false,
+      priority: 2,
+      model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+      timeoutMs: 30000,
+      maxTokens: 2048,
+      temperature: 0.7,
+    },
+    {
+      provider: 'GROQ',
+      name: 'Groq',
+      isEnabled: true,
+      isPreferred: false,
+      priority: 3,
+      model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+      timeoutMs: 30000,
+      maxTokens: 2048,
+      temperature: 0.7,
+    },
+  ];
+
+  for (const prov of aiProviders) {
+    await prisma.aIProviderConfiguration.upsert({
+      where: { provider: prov.provider },
+      update: { name: prov.name, model: prov.model },
+      create: prov,
+    });
+
+    await prisma.aIProviderHealth.upsert({
+      where: { provider: prov.provider },
+      update: {},
+      create: {
+        provider: prov.provider,
+        isHealthy: true,
+        totalRequests: 0,
+        successfulRequests: 0,
+        failedRequests: 0,
+        consecutiveErrors: 0,
+      },
+    });
+  }
+  console.log('✓ AI Provider configurations seeded.');
+  }
+
   console.log('--- SEEDING COMPLETED SUCCESSFULLY ---');
 }
 

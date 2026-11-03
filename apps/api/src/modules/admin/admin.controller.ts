@@ -214,4 +214,186 @@ export class AdminController {
     const ip = req.ip || req.socket.remoteAddress;
     return this.adminService.reviewApplication(applicationId, body.status, body.notes, actorId, ip);
   }
+
+  // ==========================================
+  // AI CONTROLS & MONITORING
+  // ==========================================
+
+  @Get('ai/config')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Get AI provider configurations, health status, and fallback state' })
+  async getAiConfig() {
+    return this.adminService.getAiConfig();
+  }
+
+  @Patch('ai/config')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Update an AI provider configuration (model, priority, state)' })
+  async updateAiConfig(
+    @Body() body: { provider: any; updates: any },
+    @CurrentUser('id') actorId: string,
+    @Req() req: Request,
+  ) {
+    const ip = req.ip || req.socket.remoteAddress;
+    return this.adminService.updateAiConfig(body.provider, body.updates, actorId, ip);
+  }
+
+  @Patch('ai/fallback')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Toggle automatic AI fallback ON/OFF' })
+  async setAiFallback(
+    @Body() body: { enabled: boolean },
+    @CurrentUser('id') actorId: string,
+    @Req() req: Request,
+  ) {
+    const ip = req.ip || req.socket.remoteAddress;
+    return this.adminService.setAiFallbackEnabled(body.enabled, actorId, ip);
+  }
+
+  @Post('ai/test/:provider')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Test connectivity to an AI provider' })
+  async testAiProvider(@Param('provider') provider: any) {
+    return this.adminService.testAiProvider(provider);
+  }
+
+  @Post('ai/reset-defaults')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Restore default AI provider order (Gemini -> DeepSeek -> Groq)' })
+  async resetAiDefaults(
+    @CurrentUser('id') actorId: string,
+    @Req() req: Request,
+  ) {
+    const ip = req.ip || req.socket.remoteAddress;
+    return this.adminService.resetAiDefaults(actorId, ip);
+  }
+
+  // ==========================================
+  // SKILLS MANAGEMENT (CRUD)
+  // ==========================================
+
+  @Get('skills')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'List skills with categories and usage metrics' })
+  async listSkills(
+    @Query('search') search?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.adminService.listSkills({ search, categoryId, page, limit });
+  }
+
+  @Get('skills/categories')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'List all skill categories' })
+  async listSkillCategories() {
+    return this.adminService.listSkillCategories();
+  }
+
+  @Get('skills/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Get a specific skill by ID' })
+  async getSkill(@Param('id') id: string) {
+    return this.adminService.getSkill(id);
+  }
+
+  @Post('skills')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Create a new platform skill' })
+  async createSkill(
+    @Body() body: { name: string; slug?: string; categoryId: string; description?: string; isActive?: boolean },
+    @CurrentUser('id') actorId: string,
+    @Req() req: Request,
+  ) {
+    const ip = req.ip || req.socket.remoteAddress;
+    return this.adminService.createSkill(body, actorId, ip);
+  }
+
+  @Patch('skills/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Update a platform skill' })
+  async updateSkill(
+    @Param('id') id: string,
+    @Body() body: { name?: string; slug?: string; categoryId?: string; description?: string; isActive?: boolean },
+    @CurrentUser('id') actorId: string,
+    @Req() req: Request,
+  ) {
+    const ip = req.ip || req.socket.remoteAddress;
+    return this.adminService.updateSkill(id, body, actorId, ip);
+  }
+
+  @Delete('skills/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Delete a platform skill' })
+  async deleteSkill(
+    @Param('id') id: string,
+    @CurrentUser('id') actorId: string,
+    @Req() req: Request,
+  ) {
+    const ip = req.ip || req.socket.remoteAddress;
+    return this.adminService.deleteSkill(id, actorId, ip);
+  }
+
+  // ==========================================
+  // OPPORTUNITIES MANAGEMENT (CRUD)
+  // ==========================================
+
+  @Get('opportunities')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPPORTUNITY_MANAGER')
+  @ApiOperation({ summary: 'List opportunities (all statuses) with search and filters' })
+  async listOpportunities(
+    @Query('search') search?: string,
+    @Query('type') type?: string,
+    @Query('status') status?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.adminService.listOpportunities({ search, type, status, page, limit });
+  }
+
+  @Get('opportunities/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPPORTUNITY_MANAGER')
+  @ApiOperation({ summary: 'Get detailed opportunity by ID' })
+  async getOpportunity(@Param('id') id: string) {
+    return this.adminService.getOpportunity(id);
+  }
+
+  @Patch('opportunities/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPPORTUNITY_MANAGER')
+  @ApiOperation({ summary: 'Update opportunity details and required skills' })
+  async updateOpportunity(
+    @Param('id') id: string,
+    @Body() body: any,
+    @CurrentUser('id') actorId: string,
+    @Req() req: Request,
+  ) {
+    const ip = req.ip || req.socket.remoteAddress;
+    return this.adminService.updateOpportunity(id, body, actorId, ip);
+  }
+
+  @Delete('opportunities/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Delete an opportunity' })
+  async deleteOpportunity(
+    @Param('id') id: string,
+    @CurrentUser('id') actorId: string,
+    @Req() req: Request,
+  ) {
+    const ip = req.ip || req.socket.remoteAddress;
+    return this.adminService.deleteOpportunity(id, actorId, ip);
+  }
+
+  @Patch('opportunities/:id/status')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'OPPORTUNITY_MANAGER')
+  @ApiOperation({ summary: 'Update opportunity status (e.g. publish OPEN, unpublish DRAFT)' })
+  async updateOpportunityStatus(
+    @Param('id') id: string,
+    @Body() body: { status: string },
+    @CurrentUser('id') actorId: string,
+    @Req() req: Request,
+  ) {
+    const ip = req.ip || req.socket.remoteAddress;
+    return this.adminService.updateOpportunityStatus(id, body.status, actorId, ip);
+  }
 }

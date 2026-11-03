@@ -173,6 +173,13 @@ export default function EvolvePage() {
 
         {/* Quick Actions */}
         <div className="flex items-center gap-2">
+          <Link
+            href="/ai?module=SKILLS"
+            className="flex items-center gap-1.5 rounded-lg border border-evolve/40 bg-evolve/10 px-3.5 py-2 text-xs font-bold text-evolve hover:bg-evolve/20 transition-colors shadow-sm"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            AI Skill Mentor
+          </Link>
           <button
             onClick={() => setShowSessionModal(true)}
             className="flex items-center gap-1.5 rounded-lg bg-evolve px-3.5 py-2 text-xs font-bold text-slate-950 hover:bg-evolve/90 transition-colors shadow-sm"

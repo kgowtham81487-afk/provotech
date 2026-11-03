@@ -227,7 +227,13 @@ export class AuthService {
     });
 
     const isEmailConfigured = !!process.env.SMTP_HOST;
-    const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password?token=${rawToken}`;
+    const frontendBase = (process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://provotech.onrender.com').trim();
+    const normalizedBase = frontendBase.startsWith('http://') || frontendBase.startsWith('https://')
+      ? frontendBase
+      : `https://${frontendBase}`;
+    const resetUrlObj = new URL('/reset-password', normalizedBase);
+    resetUrlObj.searchParams.set('token', rawToken);
+    const resetUrl = resetUrlObj.toString();
 
     return {
       message: 'If an account exists with this email address, a password reset link has been dispatched.',

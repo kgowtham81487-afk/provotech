@@ -15,6 +15,7 @@ import {
   Building2,
   ExternalLink,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -136,6 +137,15 @@ export default function ScalePage() {
           <p className="text-xs text-slate-400 mt-1">
             Convert your demonstrated skills and portfolio into real paid freelance contracts, research bounties, and assignments.
           </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/ai?module=OPPORTUNITIES"
+            className="flex items-center gap-1.5 rounded-lg border border-scale/40 bg-scale/10 px-3.5 py-2 text-xs font-bold text-scale hover:bg-scale/20 transition-colors shadow-sm"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            AI Opportunity Matcher
+          </Link>
         </div>
       </div>
 
