@@ -801,8 +801,12 @@ export class AdminService {
     return updated;
   }
 
-  async testAiProvider(provider: AiProviderName) {
-    return this.fallbackEngine.testProvider(provider);
+  async testAiProvider(provider: AiProviderName, model?: string, prompt?: string) {
+    return this.fallbackEngine.testProvider(provider, model, prompt);
+  }
+
+  async discoverAiModels(provider: AiProviderName) {
+    return this.fallbackEngine.discoverModels(provider);
   }
 
   async resetAiDefaults(actorId: string, ipAddress?: string) {

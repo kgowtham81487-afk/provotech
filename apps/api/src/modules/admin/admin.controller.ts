@@ -253,8 +253,18 @@ export class AdminController {
   @Post('ai/test/:provider')
   @Roles('SUPER_ADMIN', 'ADMIN')
   @ApiOperation({ summary: 'Test connectivity to an AI provider' })
-  async testAiProvider(@Param('provider') provider: any) {
-    return this.adminService.testAiProvider(provider);
+  async testAiProvider(
+    @Param('provider') provider: any,
+    @Body() body?: { model?: string; prompt?: string },
+  ) {
+    return this.adminService.testAiProvider(provider, body?.model, body?.prompt);
+  }
+
+  @Get('ai/models/:provider')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @ApiOperation({ summary: 'Discover available models for an AI provider via live API' })
+  async discoverAiModels(@Param('provider') provider: any) {
+    return this.adminService.discoverAiModels(provider);
   }
 
   @Post('ai/reset-defaults')

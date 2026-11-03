@@ -11,6 +11,8 @@ import {
   AiQuotaError,
   AiRateLimitError,
   AiServerError,
+  AiInsufficientBalanceError,
+  AiModelNotFoundError,
   AiProvider,
 } from '../src/modules/ai/providers/ai-provider.interface';
 import { NotFoundException } from '@nestjs/common';
@@ -65,6 +67,7 @@ describe('AI Multi-Provider Fallback, Context & Admin Security Tests', () => {
         findMany: vi.fn().mockResolvedValue(defaultChain),
         findUnique: vi.fn(),
         upsert: vi.fn(),
+        update: vi.fn(),
       },
       aIProviderHealth: {
         findMany: vi.fn().mockResolvedValue([]),
@@ -438,6 +441,93 @@ describe('AI Multi-Provider Fallback, Context & Admin Security Tests', () => {
       expect(result.debugResetLink).toBeDefined();
       expect(result.debugResetLink).toContain('https://provotech.onrender.com/reset-password?token=');
       expect(result.debugResetLink!.startsWith('http://localhost')).toBe(false);
+    });
+  });
+
+  describe('Scenario 6: AI Provider Model Configuration, Error Classification & Connectivity Repair', () => {
+    it('should fall back from Gemini 404 (model not found) and DeepSeek 402 (insufficient balance) to Groq', async () => {
+      vi.mocked(mockGemini.generate).mockRejectedValue(
+        new AiModelNotFoundError('gemini', 'gemini-1.5-flash', 'Model not found for API version v1beta or unsupported generateContent'),
+      );
+
+      vi.mocked(mockDeepSeek.generate).mockRejectedValue(
+        new AiInsufficientBalanceError('deepseek', 'Insufficient Balance'),
+      );
+
+      vi.mocked(mockGroq.generate).mockResolvedValue({
+        content: 'EES AI connection successful.',
+        provider: 'GROQ',
+        model: 'llama-3.1-8b-instant',
+        totalTokens: 10,
+        latencyMs: 140,
+      });
+
+      const res = await fallbackEngine.executeWithFallback([
+        { role: 'user', content: 'Reply with exactly: EES AI connection successful.' },
+      ]);
+
+      expect(res.fallbackOccurred).toBe(true);
+      expect(res.result.provider).toBe('GROQ');
+      expect(res.result.content).toBe('EES AI connection successful.');
+      expect(mockGemini.generate).toHaveBeenCalled();
+      expect(mockDeepSeek.generate).toHaveBeenCalled();
+      expect(mockGroq.generate).toHaveBeenCalled();
+    });
+
+    it('should not set a cooldown timer for permanent errors like 402 Insufficient Balance or 404 Model Not Found', async () => {
+      vi.mocked(mockDeepSeek.testConnection).mockResolvedValue({
+        success: false,
+        provider: 'DEEPSEEK',
+        model: 'deepseek-chat',
+        httpStatus: 402,
+        errorCategory: 'INSUFFICIENT_BALANCE',
+        latencyMs: 110,
+        message: 'Insufficient Balance',
+      });
+
+      const result = await fallbackEngine.testProvider('DEEPSEEK');
+
+      expect(result.success).toBe(false);
+      expect(result.httpStatus).toBe(402);
+      expect(result.errorCategory).toBe('INSUFFICIENT_BALANCE');
+
+      expect(mockPrisma.aIProviderHealth.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { provider: 'DEEPSEEK' },
+          update: expect.objectContaining({
+            isHealthy: false,
+            cooldownUntil: null, // Zero cooldown for permanent billing failure!
+            lastErrorMessage: expect.stringContaining('[INSUFFICIENT_BALANCE]'),
+          }),
+        }),
+      );
+    });
+
+    it('should discover models and cache them in provider metadata', async () => {
+      (mockGroq as any).discoverModels = vi.fn().mockResolvedValue([
+        { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', isRecommended: true },
+        { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile' },
+      ]);
+
+      mockPrisma.aIProviderConfiguration.findUnique.mockResolvedValue({
+        provider: 'GROQ',
+        metadata: {},
+      });
+
+      const models = await fallbackEngine.discoverModels('GROQ');
+
+      expect(models.length).toBe(2);
+      expect(models[0].id).toBe('llama-3.1-8b-instant');
+      expect(mockPrisma.aIProviderConfiguration.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { provider: 'GROQ' },
+          data: expect.objectContaining({
+            metadata: expect.objectContaining({
+              discoveredModels: models,
+            }),
+          }),
+        }),
+      );
     });
   });
 });
