@@ -3,6 +3,7 @@ import './globals.css';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { AdSenseScript } from '@/components/monetization/AdSenseScript';
+import { AuthProvider } from '@/lib/auth-context';
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://ees.provolution.com'),
@@ -42,9 +43,11 @@ export default function RootLayout({
         <AdSenseScript />
       </head>
       <body className="min-h-screen flex flex-col bg-background font-sans text-slate-100">
-        <Navbar />
-        <main className="flex-1">{children}</main>
-        <Footer />
+        <AuthProvider>
+          <Navbar />
+          <main className="flex-1">{children}</main>
+          <Footer />
+        </AuthProvider>
       </body>
     </html>
   );

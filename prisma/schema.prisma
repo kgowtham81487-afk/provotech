@@ -23,6 +23,8 @@ model User {
   passwordHash    String
   emailVerified   DateTime?
   status          UserStatus   @default(ACTIVE)
+  lastLoginAt     DateTime?
+  deletedAt       DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
@@ -31,6 +33,7 @@ model User {
   roles           UserRole[]
   sessions        Session[]
   refreshTokens   RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
 
   // Evolve relations
   fields          UserField[]
@@ -149,6 +152,19 @@ model RefreshToken {
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([userId])
   @@index([tokenHash])
@@ -972,4 +988,28 @@ model AuditLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt(sort: Desc)])
+}
+
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?  @db.Text
+  isEnabled   Boolean  @default(true)
+  metadata    Json?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([key])
+}
+
+model PlatformConfig {
+  id        String   @id @default(uuid())
+  category  String   // AI, SOCIAL, MESSAGING, INFRASTRUCTURE, GENERAL
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@index([key])
 }
