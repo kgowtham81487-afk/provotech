@@ -18,16 +18,22 @@ import {
   LoginSchema,
   ForgotPasswordSchema,
   ResetPasswordSchema,
-  RegisterInput,
-  LoginInput,
-  ForgotPasswordInput,
-  ResetPasswordInput,
 } from '@ees/shared';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  private setRefreshCookie(res: Response, token: string) {
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('ees_refresh_token', token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+  }
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user account' })
@@ -38,13 +44,7 @@ export class AuthController {
     const ip = req.ip || req.socket.remoteAddress;
     const result = await this.authService.register(input, ip);
 
-    // Set HTTP-only cookie for refresh token
-    res.cookie('ees_refresh_token', result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    this.setRefreshCookie(res, result.refreshToken);
 
     return result;
   }
@@ -59,12 +59,7 @@ export class AuthController {
     const ip = req.ip || req.socket.remoteAddress;
     const result = await this.authService.login(input, ip);
 
-    res.cookie('ees_refresh_token', result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    this.setRefreshCookie(res, result.refreshToken);
 
     return result;
   }
@@ -93,9 +88,17 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Rotate refresh token and retrieve new access token' })
-  async refresh(@Req() req: Request, @Body() body: { refreshToken?: string }) {
+  async refresh(
+    @Req() req: Request,
+    @Body() body: { refreshToken?: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const token = req.cookies?.ees_refresh_token || body?.refreshToken;
-    return this.authService.refreshToken(token);
+    const result = await this.authService.refreshToken(token);
+
+    this.setRefreshCookie(res, result.refreshToken);
+
+    return result;
   }
 
   @Post('logout')
@@ -104,8 +107,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Invalidate active sessions and refresh tokens' })
   async logout(@CurrentUser('id') userId: string, @Res({ passthrough: true }) res: Response) {
-    res.clearCookie('ees_refresh_token');
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.clearCookie('ees_refresh_token', {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+    });
     return this.authService.logout(userId);
   }
 }
-

@@ -14,8 +14,10 @@ export default function AdminAuditLogsPage() {
       setLoading(true);
       setError(null);
       const res = await api.get('/admin/audit-logs', { params: { page, limit: 25 } });
-      setLogs(res.data.items);
-      setPagination(res.data.pagination);
+      const items = Array.isArray(res.data) ? res.data : (res.data?.items || res.data?.data || []);
+      const paginationData = res.pagination || res.meta || res.data?.pagination || res.data?.meta || { page, limit: 25, total: items.length, totalPages: 1 };
+      setLogs(items);
+      setPagination(paginationData);
     } catch (err: any) {
       setError(err?.message || 'Failed to fetch platform audit logs');
     } finally {

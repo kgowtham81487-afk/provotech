@@ -33,7 +33,13 @@ const ICON_MAP: Record<string, any> = {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { user, refreshUser } = useAuth();
+  const { user, isLoading: authLoading, refreshUser } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login?redirect=/onboarding');
+    }
+  }, [user, authLoading, router]);
   const [step, setStep] = useState(1);
   const [fields, setFields] = useState<any[]>([]);
   const [primaryFieldId, setPrimaryFieldId] = useState<string | null>(null);

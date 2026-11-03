@@ -39,8 +39,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const refreshUser = async () => {
-    const storedToken = localStorage.getItem('ees_access_token');
+    const storedToken = typeof window !== 'undefined' ? localStorage.getItem('ees_access_token') : null;
     if (!storedToken) {
+      // Check if there is an active HTTP-only refresh cookie to silently restore session
+      try {
+        const refreshRes = await apiRequest<{ user?: User; accessToken: string }>('/auth/refresh', {
+          method: 'POST',
+        });
+        if (refreshRes.success && refreshRes.data?.accessToken) {
+          localStorage.setItem('ees_access_token', refreshRes.data.accessToken);
+          setToken(refreshRes.data.accessToken);
+          if (refreshRes.data.user) {
+            setUser(refreshRes.data.user);
+          } else {
+            const meRes = await apiRequest<User>('/users/me', { method: 'GET' }, refreshRes.data.accessToken);
+            if (meRes.success && meRes.data) setUser(meRes.data);
+          }
+          setIsLoading(false);
+          return;
+        }
+      } catch {
+        // No active session
+      }
       setUser(null);
       setToken(null);
       setIsLoading(false);
@@ -52,9 +72,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (res.success && res.data) {
       setUser(res.data);
     } else {
-      localStorage.removeItem('ees_access_token');
-      setUser(null);
-      setToken(null);
+      // Access token may have expired (15m TTL). Try silent refresh via refresh token!
+      const refreshRes = await apiRequest<{ user?: User; accessToken: string }>('/auth/refresh', {
+        method: 'POST',
+      });
+      if (refreshRes.success && refreshRes.data?.accessToken) {
+        localStorage.setItem('ees_access_token', refreshRes.data.accessToken);
+        setToken(refreshRes.data.accessToken);
+        if (refreshRes.data.user) {
+          setUser(refreshRes.data.user);
+        } else {
+          const retryMe = await apiRequest<User>('/users/me', { method: 'GET' }, refreshRes.data.accessToken);
+          if (retryMe.success && retryMe.data) setUser(retryMe.data);
+        }
+      } else {
+        localStorage.removeItem('ees_access_token');
+        setUser(null);
+        setToken(null);
+      }
     }
     setIsLoading(false);
   };
@@ -102,11 +137,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    const storedToken = localStorage.getItem('ees_access_token');
+    const storedToken = typeof window !== 'undefined' ? localStorage.getItem('ees_access_token') : null;
     if (storedToken) {
       await apiRequest('/auth/logout', { method: 'POST' }, storedToken).catch(() => null);
     }
-    localStorage.removeItem('ees_access_token');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('ees_access_token');
+    }
     setUser(null);
     setToken(null);
     router.push('/login');
@@ -141,4 +178,3 @@ export function useAuth() {
   }
   return context;
 }
-

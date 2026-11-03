@@ -40,11 +40,14 @@ export default function AdminOpportunitiesPage() {
         api.get('/admin/applications'),
         api.get('/fields'),
       ]);
-      setOpportunities(oppsRes.data.items || []);
-      setApplications(appsRes.data.items || []);
-      setFields(fieldsRes.data || []);
-      if (fieldsRes.data && fieldsRes.data.length > 0 && !createForm.fieldId) {
-        setCreateForm((prev) => ({ ...prev, fieldId: fieldsRes.data[0].id }));
+      const opps = Array.isArray(oppsRes.data) ? oppsRes.data : (oppsRes.data?.data || oppsRes.data?.items || []);
+      const apps = Array.isArray(appsRes.data) ? appsRes.data : (appsRes.data?.items || appsRes.data?.data || []);
+      const fieldsList = Array.isArray(fieldsRes.data) ? fieldsRes.data : (fieldsRes.data?.data || []);
+      setOpportunities(opps);
+      setApplications(apps);
+      setFields(fieldsList);
+      if (fieldsList.length > 0 && !createForm.fieldId) {
+        setCreateForm((prev) => ({ ...prev, fieldId: fieldsList[0].id }));
       }
     } catch (err: any) {
       setFeedback({ type: 'error', message: err?.message || 'Failed to load opportunity data' });

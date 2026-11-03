@@ -15,7 +15,7 @@ export function Footer() {
               <span className="font-bold text-white text-sm">EES Platform</span>
             </div>
             <p className="text-slate-500 max-w-sm mb-4 leading-relaxed">
-              Evolve, Engage & Scale is the official skill-development-to-opportunity ecosystem by{' '}
+              Evolve, Engage &amp; Scale is the official skill-development-to-opportunity ecosystem by{' '}
               <strong className="text-slate-300 font-medium">Provolution Technologies Pvt. Ltd.</strong>
             </p>
             <p className="text-[11px] text-slate-600">
@@ -33,17 +33,17 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/evolve/learning" className="hover:text-slate-200 transition-colors">
+                <Link href="/evolve?tab=learning" className="hover:text-slate-200 transition-colors">
                   Learning Trackers
                 </Link>
               </li>
               <li>
-                <Link href="/evolve/fitness" className="hover:text-slate-200 transition-colors">
+                <Link href="/evolve?tab=fitness" className="hover:text-slate-200 transition-colors">
                   Fitness Workspace
                 </Link>
               </li>
               <li>
-                <Link href="/evolve/projects" className="hover:text-slate-200 transition-colors">
+                <Link href="/evolve?tab=projects" className="hover:text-slate-200 transition-colors">
                   Project Portfolios
                 </Link>
               </li>
@@ -55,17 +55,17 @@ export function Footer() {
             <h4 className="font-semibold text-slate-200 mb-3 text-xs tracking-wider uppercase">ENGAGE</h4>
             <ul className="space-y-2">
               <li>
-                <Link href="/engage/feed" className="hover:text-slate-200 transition-colors">
+                <Link href="/engage?tab=for-you" className="hover:text-slate-200 transition-colors">
                   Field Feeds
                 </Link>
               </li>
               <li>
-                <Link href="/engage/communities" className="hover:text-slate-200 transition-colors">
+                <Link href="/engage?tab=communities" className="hover:text-slate-200 transition-colors">
                   Communities
                 </Link>
               </li>
               <li>
-                <Link href="/engage/showcase" className="hover:text-slate-200 transition-colors">
+                <Link href="/engage?tab=showcase" className="hover:text-slate-200 transition-colors">
                   Peer Showcase
                 </Link>
               </li>
@@ -79,10 +79,10 @@ export function Footer() {
 
           {/* Scale & Legal */}
           <div>
-            <h4 className="font-semibold text-slate-200 mb-3 text-xs tracking-wider uppercase">SCALE & LEGAL</h4>
+            <h4 className="font-semibold text-slate-200 mb-3 text-xs tracking-wider uppercase">SCALE &amp; LEGAL</h4>
             <ul className="space-y-2">
               <li>
-                <Link href="/scale/opportunities" className="hover:text-slate-200 transition-colors">
+                <Link href="/scale" className="hover:text-slate-200 transition-colors">
                   Provolution Opportunities
                 </Link>
               </li>

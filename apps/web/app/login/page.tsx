@@ -24,7 +24,13 @@ export default function LoginPage() {
 
     if (res.success) {
       // Check if superadmin/admin or standard user
-      router.push('/evolve');
+      let dest = '/evolve';
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const redir = params.get('redirect');
+        if (redir && redir.startsWith('/')) dest = redir;
+      }
+      router.push(dest);
     } else {
       setError(res.error || 'Invalid credentials or suspended account.');
     }

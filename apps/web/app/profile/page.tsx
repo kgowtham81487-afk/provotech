@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
 import { api } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 
 export default function ProfilePage() {
-  const { user, refreshUser } = useAuth();
+  const { user, isLoading: authLoading, refreshUser } = useAuth();
+  const router = useRouter();
   const [profileData, setProfileData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [editModal, setEditModal] = useState(false);
@@ -35,8 +35,14 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    fetchProfile();
-  }, []);
+    if (!authLoading && !user) {
+      router.push('/login?redirect=/profile');
+      return;
+    }
+    if (user) {
+      fetchProfile();
+    }
+  }, [user, authLoading, router]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,10 +61,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 flex flex-col">
-      <Navbar />
-
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-5xl w-full mx-auto px-4 py-8 space-y-6">
         {feedback && (
           <div
             className={`p-4 rounded-xl text-sm flex items-center justify-between border ${
@@ -259,9 +262,6 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
-      </main>
-
-      <Footer />
     </div>
   );
 }

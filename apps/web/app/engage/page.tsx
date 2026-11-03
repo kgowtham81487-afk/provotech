@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Users,
   Heart,
@@ -40,7 +41,10 @@ export default function EngagePage() {
     setIsLoading(true);
     const res = await apiRequest(`/engage/feed?type=${feedType}`, { method: 'GET' });
     if (res.success && res.data) {
-      setPosts(res.data.data || []);
+      const items = Array.isArray(res.data) ? res.data : (res.data.data || res.data.items || []);
+      setPosts(items);
+    } else {
+      setPosts([]);
     }
     setIsLoading(false);
   };
@@ -48,9 +52,22 @@ export default function EngagePage() {
   const loadCommunities = async () => {
     const res = await apiRequest('/engage/communities', { method: 'GET' });
     if (res.success && res.data) {
-      setCommunities(res.data);
+      const comms = Array.isArray(res.data) ? res.data : (res.data.data || res.data.items || []);
+      setCommunities(comms);
+    } else {
+      setCommunities([]);
     }
   };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab && ['for-you', 'field', 'following', 'showcase'].includes(tab)) {
+        setFeedType(tab as any);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     loadFeed();
@@ -156,39 +173,54 @@ export default function EngagePage() {
         {/* Left Column: Post Composer & Feeds */}
         <div className="lg:col-span-2 space-y-6">
           {/* Post Composer Card */}
-          <div className="rounded-2xl border border-surface-border bg-surface p-5 shadow-lg">
-            <div className="flex items-start gap-3">
-              <div className="h-9 w-9 rounded-full bg-slate-800 border border-surface-border flex items-center justify-center font-bold text-xs uppercase text-white shrink-0">
-                {user?.displayName?.charAt(0) || 'U'}
-              </div>
-              <div className="w-full">
-                <textarea
-                  rows={3}
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="Share a project breakthrough, code architecture, or learning milestone..."
-                  className="w-full rounded-xl border border-surface-border/60 bg-surface-elevated/40 p-3 text-sm text-white placeholder-slate-500 focus:border-engage focus:outline-none"
-                />
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-3">
-                  <input
-                    type="url"
-                    value={mediaUrl}
-                    onChange={(e) => setMediaUrl(e.target.value)}
-                    placeholder="Optional image/demo URL"
-                    className="w-full sm:w-80 rounded-lg border border-surface-border bg-surface-elevated/80 px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none"
+          {user ? (
+            <div className="rounded-2xl border border-surface-border bg-surface p-5 shadow-lg">
+              <div className="flex items-start gap-3">
+                <div className="h-9 w-9 rounded-full bg-slate-800 border border-surface-border flex items-center justify-center font-bold text-xs uppercase text-white shrink-0">
+                  {user?.displayName?.charAt(0) || 'U'}
+                </div>
+                <div className="w-full">
+                  <textarea
+                    rows={3}
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Share a project breakthrough, code architecture, or learning milestone..."
+                    className="w-full rounded-xl border border-surface-border/60 bg-surface-elevated/40 p-3 text-sm text-white placeholder-slate-500 focus:border-engage focus:outline-none"
                   />
-                  <button
-                    onClick={handleCreatePost}
-                    disabled={isPosting || !content.trim()}
-                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-lg bg-engage px-5 py-2 text-xs font-bold text-slate-950 hover:bg-engage/90 transition-all disabled:opacity-50"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    {isPosting ? 'Posting...' : 'Share Update (+75 XP)'}
-                  </button>
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-3">
+                    <input
+                      type="url"
+                      value={mediaUrl}
+                      onChange={(e) => setMediaUrl(e.target.value)}
+                      placeholder="Optional image/demo URL"
+                      className="w-full sm:w-80 rounded-lg border border-surface-border bg-surface-elevated/80 px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={handleCreatePost}
+                      disabled={isPosting || !content.trim()}
+                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-lg bg-engage px-5 py-2 text-xs font-bold text-slate-950 hover:bg-engage/90 transition-all disabled:opacity-50"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      {isPosting ? 'Posting...' : 'Share Update (+75 XP)'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-2xl border border-surface-border bg-surface p-6 text-center shadow-lg">
+              <h3 className="text-sm font-bold text-white mb-1">Join the Technical Discourse</h3>
+              <p className="text-xs text-slate-400 mb-4 max-w-md mx-auto">
+                Sign in to post technical updates, share portfolio milestones, and collaborate with peers in your field.
+              </p>
+              <Link
+                href="/login?redirect=/engage"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-engage px-4 py-2 text-xs font-bold text-slate-950 hover:bg-engage/90 transition-all"
+              >
+                Sign In to Participate
+              </Link>
+            </div>
+          )}
 
           {/* Feed Filter Tabs */}
           <div className="flex items-center gap-2 border-b border-surface-border/60 pb-3 text-xs font-semibold overflow-x-auto">

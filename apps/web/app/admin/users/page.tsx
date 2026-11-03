@@ -35,8 +35,10 @@ export default function AdminUsersPage() {
       if (statusFilter) params.status = statusFilter;
 
       const res = await api.get('/admin/users', { params });
-      setUsers(res.data.items);
-      setPagination(res.data.pagination);
+      const items = Array.isArray(res.data) ? res.data : (res.data?.items || res.data?.data || []);
+      const paginationData = res.pagination || res.meta || res.data?.pagination || res.data?.meta || { page, limit: 15, total: items.length, totalPages: 1 };
+      setUsers(items);
+      setPagination(paginationData);
     } catch (err: any) {
       setFeedback({ type: 'error', message: err?.message || 'Failed to fetch user directory' });
     } finally {

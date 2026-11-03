@@ -1,15 +1,21 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 
 export default function NotificationsPage() {
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login?redirect=/notifications');
+      return;
+    }
     const fetchNotifs = async () => {
       try {
         setLoading(true);
@@ -21,14 +27,11 @@ export default function NotificationsPage() {
         setLoading(false);
       }
     };
-    fetchNotifs();
-  }, []);
+    if (user) fetchNotifs();
+  }, [user, authLoading, router]);
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 flex flex-col">
-      <Navbar />
-
-      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-3xl w-full mx-auto px-4 py-8 space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Notifications</h1>
           <p className="text-sm text-slate-400">
@@ -76,9 +79,6 @@ export default function NotificationsPage() {
             </div>
           )}
         </div>
-      </main>
-
-      <Footer />
     </div>
   );
 }

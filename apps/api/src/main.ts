@@ -12,14 +12,27 @@ async function bootstrap() {
   // Security middlewares
   app.use(cookieParser());
 
-  const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',');
+  const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile apps or curl) or if in whitelist
-      if (!origin || corsOrigins.includes(origin) || origin.endsWith('.provolution.com') || origin.endsWith('.vercel.app')) {
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server) or matching allowed domains
+      if (
+        !origin ||
+        corsOrigins.includes(origin) ||
+        origin.endsWith('.provolution.com') ||
+        origin.endsWith('.provolution.in') ||
+        origin.endsWith('.vercel.app') ||
+        origin.endsWith('.onrender.com') ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1')
+      ) {
         callback(null, true);
       } else {
-        callback(new Error('Blocked by CORS policy'));
+        callback(new Error(`Blocked by CORS policy: origin ${origin} not allowed`));
       }
     },
     credentials: true,

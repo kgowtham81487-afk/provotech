@@ -10,6 +10,8 @@ import { map } from 'rxjs/operators';
 export interface ResponseEnvelope<T> {
   success: boolean;
   data: T;
+  meta?: any;
+  pagination?: any;
   timestamp: string;
 }
 
@@ -23,12 +25,24 @@ export class TransformInterceptor<T>
   ): Observable<ResponseEnvelope<T>> {
     return next.handle().pipe(
       map((data) => {
-        // If data already contains its own custom envelope or pagination meta
-        if (data && typeof data === 'object' && 'data' in data && 'meta' in data) {
+        if (!data || typeof data !== 'object') {
           return {
             success: true,
-            data: data.data,
-            meta: data.meta,
+            data,
+            timestamp: new Date().toISOString(),
+          };
+        }
+
+        // Support both 'meta' and 'pagination' conventions consistently
+        const pagination = data.meta || data.pagination;
+        const items = data.data !== undefined ? data.data : data.items;
+
+        if (items !== undefined && pagination !== undefined) {
+          return {
+            success: true,
+            data: items,
+            pagination,
+            meta: pagination,
             timestamp: new Date().toISOString(),
           };
         }

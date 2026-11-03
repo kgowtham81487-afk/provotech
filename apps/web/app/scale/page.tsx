@@ -52,9 +52,18 @@ export default function ScalePage() {
       user ? apiRequest('/scale/ledger', { method: 'GET' }) : Promise.resolve({ success: false, data: null }),
     ]);
 
-    if (oppsRes.success && oppsRes.data) setOpportunities(oppsRes.data.data || []);
-    if (appsRes.success && appsRes.data) setMyApplications(appsRes.data);
-    if (assignsRes.success && assignsRes.data) setMyAssignments(assignsRes.data);
+    if (oppsRes.success && oppsRes.data) {
+      const opps = Array.isArray(oppsRes.data) ? oppsRes.data : (oppsRes.data.data || oppsRes.data.items || []);
+      setOpportunities(opps);
+    }
+    if (appsRes.success && appsRes.data) {
+      const apps = Array.isArray(appsRes.data) ? appsRes.data : (appsRes.data.data || appsRes.data.items || []);
+      setMyApplications(apps);
+    }
+    if (assignsRes.success && assignsRes.data) {
+      const assigns = Array.isArray(assignsRes.data) ? assignsRes.data : (assignsRes.data.data || assignsRes.data.items || []);
+      setMyAssignments(assigns);
+    }
     if (ledgerRes.success && ledgerRes.data) setLedger(ledgerRes.data);
 
     setIsLoading(false);
@@ -141,11 +150,10 @@ export default function ScalePage() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as any)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-              activeTab === tab.key
-                ? 'bg-scale/15 text-scale font-bold'
-                : 'text-slate-400 hover:text-white hover:bg-surface-elevated'
-            }`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${activeTab === tab.key
+              ? 'bg-scale/15 text-scale font-bold'
+              : 'text-slate-400 hover:text-white hover:bg-surface-elevated'
+              }`}
           >
             <span>{tab.label}</span>
             {tab.count !== undefined && (
@@ -243,15 +251,14 @@ export default function ScalePage() {
                 >
                   <div>
                     <span
-                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded inline-block mb-1.5 ${
-                        app.status === 'SELECTED'
-                          ? 'bg-emerald-500/20 text-emerald-300'
-                          : app.status === 'SHORTLISTED'
+                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded inline-block mb-1.5 ${app.status === 'SELECTED'
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : app.status === 'SHORTLISTED'
                           ? 'bg-amber-500/20 text-amber-300'
                           : app.status === 'REJECTED'
-                          ? 'bg-red-500/20 text-red-300'
-                          : 'bg-blue-500/20 text-blue-300'
-                      }`}
+                            ? 'bg-red-500/20 text-red-300'
+                            : 'bg-blue-500/20 text-blue-300'
+                        }`}
                     >
                       Status: {app.status}
                     </span>
@@ -338,11 +345,10 @@ export default function ScalePage() {
                                 </a>
                               )}
                               <span
-                                className={`text-[10px] px-2 py-0.5 rounded ${
-                                  d.isApproved
-                                    ? 'bg-emerald-500/20 text-emerald-300'
-                                    : 'bg-amber-500/20 text-amber-300'
-                                }`}
+                                className={`text-[10px] px-2 py-0.5 rounded ${d.isApproved
+                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                  : 'bg-amber-500/20 text-amber-300'
+                                  }`}
                               >
                                 {d.isApproved ? 'Approved' : 'Under Review'}
                               </span>
@@ -416,9 +422,8 @@ export default function ScalePage() {
                         {r.currency} {r.amount.toLocaleString()}
                       </span>
                       <span
-                        className={`text-[10px] font-semibold ${
-                          r.status === 'DISBURSED' ? 'text-emerald-400' : 'text-amber-400'
-                        }`}
+                        className={`text-[10px] font-semibold ${r.status === 'DISBURSED' ? 'text-emerald-400' : 'text-amber-400'
+                          }`}
                       >
                         {r.status}
                       </span>

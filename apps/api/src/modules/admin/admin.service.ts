@@ -576,6 +576,7 @@ export class AdminService {
     return {
       status: 'Connected',
       provider: 'PostgreSQL',
+      tables: counts,
       tableRecordCounts: counts,
       timestamp: new Date().toISOString(),
     };

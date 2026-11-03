@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
 import { api } from '@/lib/api';
 
 export default function AiHubPage() {
@@ -63,10 +61,7 @@ export default function AiHubPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 flex flex-col">
-      <Navbar />
-
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8">
+    <div className="max-w-6xl w-full mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center max-w-2xl mx-auto mb-8">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold mb-3">
@@ -350,9 +345,6 @@ export default function AiHubPage() {
             </div>
           </div>
         )}
-      </main>
-
-      <Footer />
     </div>
   );
 }

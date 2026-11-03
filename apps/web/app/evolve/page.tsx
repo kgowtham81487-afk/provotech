@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Compass,
   Plus,
@@ -23,7 +24,8 @@ import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 
 export default function EvolvePage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'learning' | 'fitness' | 'content' | 'projects'>('overview');
   const [isLoading, setIsLoading] = useState(true);
@@ -60,8 +62,21 @@ export default function EvolvePage() {
   };
 
   useEffect(() => {
-    loadDashboard();
-  }, []);
+    if (!authLoading && !user) {
+      router.push('/login?redirect=/evolve');
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab && ['overview', 'learning', 'fitness', 'content', 'projects'].includes(tab)) {
+        setActiveTab(tab as any);
+      }
+    }
+    if (user) {
+      loadDashboard();
+    }
+  }, [user, authLoading, router]);
 
   const handleLogSession = async (e: React.FormEvent) => {
     e.preventDefault();

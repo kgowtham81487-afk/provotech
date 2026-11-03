@@ -2,8 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
 import { api } from '@/lib/api';
 
 export default function FieldsExplorerPage() {
@@ -26,10 +24,7 @@ export default function FieldsExplorerPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 flex flex-col">
-      <Navbar />
-
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8 space-y-8">
+    <div className="max-w-6xl w-full mx-auto px-4 py-8 space-y-8">
         <div className="text-center max-w-2xl mx-auto">
           <span className="text-xs font-semibold uppercase tracking-wider text-indigo-400">
             EES Taxonomy & Skill Atlas
@@ -98,9 +93,6 @@ export default function FieldsExplorerPage() {
             ))}
           </div>
         )}
-      </main>
-
-      <Footer />
     </div>
   );
 }

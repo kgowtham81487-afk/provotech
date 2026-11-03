@@ -1,12 +1,27 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+let rawBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+rawBase = rawBase.trim().replace(/\/+$/, '');
+if (!rawBase.endsWith('/api/v1')) {
+  rawBase += '/api/v1';
+}
+export const API_BASE = rawBase;
+
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  meta?: any;
+  pagination?: any;
+  error?: { message: string };
+}
 
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {},
   token?: string | null,
-): Promise<{ success: boolean; data?: T; error?: { message: string } }> {
+): Promise<ApiResponse<T>> {
   const headers = new Headers(options.headers || {});
-  headers.set('Content-Type', 'application/json');
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
 
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
@@ -17,10 +32,19 @@ export async function apiRequest<T = any>(
     }
   }
 
+  // Ensure body is stringified if passed as an object
+  let body = options.body;
+  if (body && typeof body === 'object' && !(body instanceof FormData) && !(body instanceof Blob)) {
+    body = JSON.stringify(body);
+  }
+
   try {
-    const res = await fetch(`${API_BASE}${endpoint}`, {
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const res = await fetch(`${API_BASE}${cleanEndpoint}`, {
       ...options,
       headers,
+      body,
+      credentials: 'include',
     });
 
     const json = await res.json().catch(() => null);
@@ -34,9 +58,13 @@ export async function apiRequest<T = any>(
       };
     }
 
+    const pagination = json?.pagination || json?.meta;
+
     return {
       success: true,
       data: json?.data !== undefined ? json.data : json,
+      meta: pagination,
+      pagination,
     };
   } catch (err) {
     return {
@@ -68,7 +96,7 @@ export const api = {
   post: async (endpoint: string, body?: any, options: { headers?: HeadersInit } = {}) => {
     const res = await apiRequest(endpoint, {
       method: 'POST',
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
       headers: options.headers,
     });
     if (!res.success) throw new Error(res.error?.message || 'Request failed');
@@ -77,7 +105,7 @@ export const api = {
   patch: async (endpoint: string, body?: any, options: { headers?: HeadersInit } = {}) => {
     const res = await apiRequest(endpoint, {
       method: 'PATCH',
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
       headers: options.headers,
     });
     if (!res.success) throw new Error(res.error?.message || 'Request failed');
