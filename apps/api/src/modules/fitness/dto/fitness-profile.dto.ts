@@ -29,3 +29,4 @@ export interface OnboardingFitnessDto {
   dietaryPreference?: string;
   customCalorieTarget?: number;
 }
+

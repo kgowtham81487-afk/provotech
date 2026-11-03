@@ -369,3 +369,4 @@ export default function WorkoutPlansPage() {
     </div>
   );
 }
+

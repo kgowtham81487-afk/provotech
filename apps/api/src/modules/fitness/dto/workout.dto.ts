@@ -45,3 +45,4 @@ export interface UpdateWorkoutPlanDto {
   isActive?: boolean;
   exercises?: CreateWorkoutPlanExerciseDto[];
 }
+

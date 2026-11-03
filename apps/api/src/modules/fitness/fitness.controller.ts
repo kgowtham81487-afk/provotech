@@ -363,3 +363,4 @@ export class FitnessController {
     return this.fitnessService.adminDeleteFood(id);
   }
 }
+

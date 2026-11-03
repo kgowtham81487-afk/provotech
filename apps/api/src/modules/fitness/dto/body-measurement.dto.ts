@@ -43,3 +43,4 @@ export interface UpdateFitnessGoalDto {
   targetDate?: string;
   isAchieved?: boolean;
 }
+
