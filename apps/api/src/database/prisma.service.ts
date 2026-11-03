@@ -15,4 +15,21 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   async onModuleDestroy() {
     await this.$disconnect();
   }
+
+  // Interoperability aliases for AI conversations and provider delegates
+  get aIConversation() {
+    return this.conversation;
+  }
+
+  get aIMessage() {
+    return this.message;
+  }
+
+  get aiProviderConfiguration() {
+    return this.aIProviderConfiguration;
+  }
+
+  get aiProviderHealth() {
+    return this.aIProviderHealth;
+  }
 }

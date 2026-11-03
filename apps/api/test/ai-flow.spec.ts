@@ -39,7 +39,7 @@ describe('AI Multi-Provider Fallback, Context & Admin Security Tests', () => {
       user: {
         findUnique: vi.fn(),
       },
-      aIConversation: {
+      conversation: {
         findMany: vi.fn().mockResolvedValue([]),
         findFirst: vi.fn(),
         findUnique: vi.fn(),
@@ -47,13 +47,19 @@ describe('AI Multi-Provider Fallback, Context & Admin Security Tests', () => {
         update: vi.fn(),
         delete: vi.fn(),
       },
-      aIMessage: {
+      message: {
         create: vi.fn().mockImplementation(async ({ data }: any) => ({
           id: 'msg-' + Math.random().toString(36).substring(7),
           ...data,
           createdAt: new Date(),
         })),
         findMany: vi.fn().mockResolvedValue([]),
+      },
+      get aIConversation() {
+        return this.conversation;
+      },
+      get aIMessage() {
+        return this.message;
       },
       aIProviderConfiguration: {
         findMany: vi.fn().mockResolvedValue(defaultChain),
@@ -268,7 +274,7 @@ describe('AI Multi-Provider Fallback, Context & Admin Security Tests', () => {
       const userA = 'user-a-uuid';
       const conversationId = 'conv-123';
 
-      mockPrisma.aIConversation.findFirst.mockResolvedValue(null);
+      mockPrisma.conversation.findFirst.mockResolvedValue(null);
 
       await expect(
         aiService.getConversation(conversationId, userA),
@@ -279,7 +285,7 @@ describe('AI Multi-Provider Fallback, Context & Admin Security Tests', () => {
       const userId = 'user-123';
       const conversationId = 'conv-123';
 
-      mockPrisma.aIConversation.findFirst.mockResolvedValue({
+      mockPrisma.conversation.findFirst.mockResolvedValue({
         id: conversationId,
         userId,
         messages: [
@@ -304,7 +310,7 @@ describe('AI Multi-Provider Fallback, Context & Admin Security Tests', () => {
 
       expect(response.assistantMessage.content).toBe('Second answer with context.');
       expect(response.providerUsed).toBe('GEMINI');
-      expect(mockPrisma.aIMessage.create).toHaveBeenCalledWith(
+      expect(mockPrisma.message.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             conversationId,

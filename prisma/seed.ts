@@ -358,28 +358,49 @@ async function main() {
   }
   console.log('✓ Taxonomy fields and skills seeded.');
 
-  // 6. Fitness Exercises Catalog
+  // 6. Fitness Exercises Catalog (Verified Multi-Disciplinary Library)
   const exercises = [
-    { name: 'Barbell Bench Press', muscleGroup: 'Chest' },
-    { name: 'Incline Dumbbell Press', muscleGroup: 'Chest' },
-    { name: 'Barbell Back Squat', muscleGroup: 'Quads / Glutes' },
-    { name: 'Conventional Deadlift', muscleGroup: 'Hamstrings / Lower Back' },
-    { name: 'Overhead Shoulder Press', muscleGroup: 'Shoulders' },
-    { name: 'Barbell Bent-Over Row', muscleGroup: 'Upper Back' },
-    { name: 'Pull-Ups', muscleGroup: 'Lats' },
-    { name: 'Dips', muscleGroup: 'Triceps / Chest' },
-    { name: 'Romanian Deadlift', muscleGroup: 'Hamstrings' },
-    { name: 'Plank', muscleGroup: 'Core' },
+    { name: 'Barbell Bench Press', category: 'CHEST', muscleGroup: 'Chest', secondaryMuscles: 'Triceps, Front Delts', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Lie on a flat bench, grip barbell slightly wider than shoulder width. Lower bar smoothly to mid-chest and drive back up.' },
+    { name: 'Incline Dumbbell Press', category: 'CHEST', muscleGroup: 'Chest', secondaryMuscles: 'Upper Chest, Triceps', equipment: 'DUMBBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Set bench to 30-45 degrees. Press dumbbells upward smoothly until arms are extended.' },
+    { name: 'Dips', category: 'CHEST', muscleGroup: 'Chest', secondaryMuscles: 'Triceps, Shoulders', equipment: 'BODYWEIGHT', exerciseType: 'BODYWEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Lower your body on parallel bars with a slight forward torso lean, then press back to lockout.' },
+    { name: 'Push-Ups', category: 'CHEST', muscleGroup: 'Chest', secondaryMuscles: 'Triceps, Core', equipment: 'BODYWEIGHT', exerciseType: 'BODYWEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Standard pushup posture with straight spine and core braced. Touch chest near ground.' },
+    { name: 'Barbell Deadlift', category: 'BACK', muscleGroup: 'Back', secondaryMuscles: 'Hamstrings, Glutes, Forearms', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'ADVANCED', instructions: 'Hips back, chest tall, maintain neutral spine while pulling barbell off floor to full hip extension.' },
+    { name: 'Pull-Ups', category: 'BACK', muscleGroup: 'Back', secondaryMuscles: 'Biceps, Forearms', equipment: 'BODYWEIGHT', exerciseType: 'BODYWEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Overhand grip on bar. Pull chest toward bar until chin clears bar height.' },
+    { name: 'Lat Pulldown', category: 'BACK', muscleGroup: 'Back', secondaryMuscles: 'Biceps', equipment: 'CABLE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Pull cable bar downward to upper chest, retracting shoulder blades.' },
+    { name: 'Bent-Over Barbell Row', category: 'BACK', muscleGroup: 'Back', secondaryMuscles: 'Lats, Rhomboids, Biceps', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Hinge at hips with straight back. Pull barbell into lower abdomen.' },
+    { name: 'Overhead Barbell Press', category: 'SHOULDERS', muscleGroup: 'Shoulders', secondaryMuscles: 'Triceps, Upper Chest', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Press barbell overhead from collarbone to full arm lockout without arching lower back.' },
+    { name: 'Dumbbell Lateral Raise', category: 'SHOULDERS', muscleGroup: 'Shoulders', secondaryMuscles: 'Traps', equipment: 'DUMBBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Raise dumbbells outward to shoulder height with slight elbow bend.' },
+    { name: 'Face Pulls', category: 'SHOULDERS', muscleGroup: 'Shoulders', secondaryMuscles: 'Rear Delts, Rotator Cuff', equipment: 'CABLE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Pull rope attachment toward face, flaring elbows back and out.' },
+    { name: 'Barbell Bicep Curl', category: 'BICEPS', muscleGroup: 'Biceps', secondaryMuscles: 'Forearms', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Keep elbows tucked to sides, curl barbell up toward shoulders.' },
+    { name: 'Hammer Curl', category: 'BICEPS', muscleGroup: 'Biceps', secondaryMuscles: 'Brachialis, Forearms', equipment: 'DUMBBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Palms facing each other, curl dumbbells smoothly.' },
+    { name: 'Tricep Rope Pushdown', category: 'TRICEPS', muscleGroup: 'Triceps', secondaryMuscles: 'None', equipment: 'CABLE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Push cable downward and spread rope tips at bottom of movement.' },
+    { name: 'Barbell Back Squat', category: 'QUADRICEPS', muscleGroup: 'Quadriceps', secondaryMuscles: 'Glutes, Core, Lower Back', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Squat hips back and down until thighs are parallel to ground, then drive up through mid-foot.' },
+    { name: 'Leg Press', category: 'QUADRICEPS', muscleGroup: 'Quadriceps', secondaryMuscles: 'Glutes', equipment: 'MACHINE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Press platform away smoothly without fully locking knees at peak.' },
+    { name: 'Bulgarian Split Squat', category: 'QUADRICEPS', muscleGroup: 'Quadriceps', secondaryMuscles: 'Glutes, Calves', equipment: 'DUMBBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Rear foot elevated on bench, lower front thigh until parallel to floor.' },
+    { name: 'Romanian Deadlift', category: 'HAMSTRINGS', muscleGroup: 'Hamstrings', secondaryMuscles: 'Glutes, Lower Back', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Hinge back at hips with soft knees, lowering bar along shins until hamstrings stretch.' },
+    { name: 'Barbell Hip Thrust', category: 'GLUTES', muscleGroup: 'Glutes', secondaryMuscles: 'Hamstrings', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Upper back on bench, drive hips up to ceiling until torso and thighs form straight line.' },
+    { name: 'Standing Calf Raise', category: 'CALVES', muscleGroup: 'Calves', secondaryMuscles: 'None', equipment: 'MACHINE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Raise heels up onto toes, hold peak contraction, and lower slowly.' },
+    { name: 'Hanging Leg Raise', category: 'CORE', muscleGroup: 'Core', secondaryMuscles: 'Hip Flexors', equipment: 'BODYWEIGHT', exerciseType: 'BODYWEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Hang from pullup bar, raise legs up to 90 degrees without swinging.' },
+    { name: 'Plank', category: 'CORE', muscleGroup: 'Core', secondaryMuscles: 'Shoulders, Glutes', equipment: 'BODYWEIGHT', exerciseType: 'DURATION', difficulty: 'BEGINNER', instructions: 'Hold straight pushup or forearm posture with braced abdomen.' },
+    { name: 'Treadmill Running', category: 'CARDIO', muscleGroup: 'Full Body', secondaryMuscles: 'Legs, Heart', equipment: 'MACHINE', exerciseType: 'DISTANCE_DURATION', difficulty: 'BEGINNER', instructions: 'Cardiovascular endurance training on running belt.' },
   ];
 
   for (const ex of exercises) {
     await prisma.exercise.upsert({
       where: { name: ex.name },
-      update: { muscleGroup: ex.muscleGroup },
+      update: {
+        category: ex.category,
+        muscleGroup: ex.muscleGroup,
+        secondaryMuscles: ex.secondaryMuscles,
+        equipment: ex.equipment,
+        exerciseType: ex.exerciseType,
+        difficulty: ex.difficulty,
+        instructions: ex.instructions,
+      },
       create: ex,
     });
   }
-  console.log('✓ Fitness exercises catalog seeded.');
+  console.log('✓ Fitness exercises catalog seeded (' + exercises.length + ' exercises).');
 
   // 7. Initial Achievements
   const achievements = [
@@ -539,53 +560,8 @@ async function main() {
     });
   }
   console.log('✓ AI Provider configurations seeded.');
-  }
 
-  // 12. Fitness Exercise Library Seeding
-  const exercises = [
-    { name: 'Barbell Bench Press', category: 'CHEST', muscleGroup: 'Chest', secondaryMuscles: 'Triceps, Front Delts', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Lie on a flat bench, grip barbell slightly wider than shoulder width. Lower bar smoothly to mid-chest and drive back up.' },
-    { name: 'Incline Dumbbell Press', category: 'CHEST', muscleGroup: 'Chest', secondaryMuscles: 'Upper Chest, Triceps', equipment: 'DUMBBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Set bench to 30-45 degrees. Press dumbbells upward smoothly until arms are extended.' },
-    { name: 'Dips', category: 'CHEST', muscleGroup: 'Chest', secondaryMuscles: 'Triceps, Shoulders', equipment: 'BODYWEIGHT', exerciseType: 'BODYWEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Lower your body on parallel bars with a slight forward torso lean, then press back to lockout.' },
-    { name: 'Push-Ups', category: 'CHEST', muscleGroup: 'Chest', secondaryMuscles: 'Triceps, Core', equipment: 'BODYWEIGHT', exerciseType: 'BODYWEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Standard pushup posture with straight spine and core braced. Touch chest near ground.' },
-    { name: 'Barbell Deadlift', category: 'BACK', muscleGroup: 'Back', secondaryMuscles: 'Hamstrings, Glutes, Forearms', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'ADVANCED', instructions: 'Hips back, chest tall, maintain neutral spine while pulling barbell off floor to full hip extension.' },
-    { name: 'Pull-Ups', category: 'BACK', muscleGroup: 'Back', secondaryMuscles: 'Biceps, Forearms', equipment: 'BODYWEIGHT', exerciseType: 'BODYWEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Overhand grip on bar. Pull chest toward bar until chin clears bar height.' },
-    { name: 'Lat Pulldown', category: 'BACK', muscleGroup: 'Back', secondaryMuscles: 'Biceps', equipment: 'CABLE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Pull cable bar downward to upper chest, retracting shoulder blades.' },
-    { name: 'Bent-Over Barbell Row', category: 'BACK', muscleGroup: 'Back', secondaryMuscles: 'Lats, Rhomboids, Biceps', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Hinge at hips with straight back. Pull barbell into lower abdomen.' },
-    { name: 'Overhead Barbell Press', category: 'SHOULDERS', muscleGroup: 'Shoulders', secondaryMuscles: 'Triceps, Upper Chest', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Press barbell overhead from collarbone to full arm lockout without arching lower back.' },
-    { name: 'Dumbbell Lateral Raise', category: 'SHOULDERS', muscleGroup: 'Shoulders', secondaryMuscles: 'Traps', equipment: 'DUMBBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Raise dumbbells outward to shoulder height with slight elbow bend.' },
-    { name: 'Face Pulls', category: 'SHOULDERS', muscleGroup: 'Shoulders', secondaryMuscles: 'Rear Delts, Rotator Cuff', equipment: 'CABLE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Pull rope attachment toward face, flaring elbows back and out.' },
-    { name: 'Barbell Bicep Curl', category: 'BICEPS', muscleGroup: 'Biceps', secondaryMuscles: 'Forearms', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Keep elbows tucked to sides, curl barbell up toward shoulders.' },
-    { name: 'Hammer Curl', category: 'BICEPS', muscleGroup: 'Biceps', secondaryMuscles: 'Brachialis, Forearms', equipment: 'DUMBBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Palms facing each other, curl dumbbells smoothly.' },
-    { name: 'Tricep Rope Pushdown', category: 'TRICEPS', muscleGroup: 'Triceps', secondaryMuscles: 'None', equipment: 'CABLE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Push cable downward and spread rope tips at bottom of movement.' },
-    { name: 'Barbell Back Squat', category: 'QUADRICEPS', muscleGroup: 'Quadriceps', secondaryMuscles: 'Glutes, Core, Lower Back', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Squat hips back and down until thighs are parallel to ground, then drive up through mid-foot.' },
-    { name: 'Leg Press', category: 'QUADRICEPS', muscleGroup: 'Quadriceps', secondaryMuscles: 'Glutes', equipment: 'MACHINE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Press platform away smoothly without fully locking knees at peak.' },
-    { name: 'Bulgarian Split Squat', category: 'QUADRICEPS', muscleGroup: 'Quadriceps', secondaryMuscles: 'Glutes, Calves', equipment: 'DUMBBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Rear foot elevated on bench, lower front thigh until parallel to floor.' },
-    { name: 'Romanian Deadlift', category: 'HAMSTRINGS', muscleGroup: 'Hamstrings', secondaryMuscles: 'Glutes, Lower Back', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Hinge back at hips with soft knees, lowering bar along shins until hamstrings stretch.' },
-    { name: 'Barbell Hip Thrust', category: 'GLUTES', muscleGroup: 'Glutes', secondaryMuscles: 'Hamstrings', equipment: 'BARBELL', exerciseType: 'WEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Upper back on bench, drive hips up to ceiling until torso and thighs form straight line.' },
-    { name: 'Standing Calf Raise', category: 'CALVES', muscleGroup: 'Calves', secondaryMuscles: 'None', equipment: 'MACHINE', exerciseType: 'WEIGHT_REPS', difficulty: 'BEGINNER', instructions: 'Raise heels up onto toes, hold peak contraction, and lower slowly.' },
-    { name: 'Hanging Leg Raise', category: 'CORE', muscleGroup: 'Core', secondaryMuscles: 'Hip Flexors', equipment: 'BODYWEIGHT', exerciseType: 'BODYWEIGHT_REPS', difficulty: 'INTERMEDIATE', instructions: 'Hang from pullup bar, raise legs up to 90 degrees without swinging.' },
-    { name: 'Plank', category: 'CORE', muscleGroup: 'Core', secondaryMuscles: 'Shoulders, Glutes', equipment: 'BODYWEIGHT', exerciseType: 'DURATION', difficulty: 'BEGINNER', instructions: 'Hold straight pushup or forearm posture with braced abdomen.' },
-    { name: 'Treadmill Running', category: 'CARDIO', muscleGroup: 'Full Body', secondaryMuscles: 'Legs, Heart', equipment: 'MACHINE', exerciseType: 'DISTANCE_DURATION', difficulty: 'BEGINNER', instructions: 'Cardiovascular endurance training on running belt.' },
-  ];
-
-  for (const ex of exercises) {
-    await prisma.exercise.upsert({
-      where: { name: ex.name },
-      update: {
-        category: ex.category,
-        muscleGroup: ex.muscleGroup,
-        secondaryMuscles: ex.secondaryMuscles,
-        equipment: ex.equipment,
-        exerciseType: ex.exerciseType,
-        difficulty: ex.difficulty,
-        instructions: ex.instructions,
-      },
-      create: ex,
-    });
-  }
-  console.log('✓ Exercise catalog seeded (' + exercises.length + ' exercises).');
-
-  // 13. Indian & Tamil Nadu Food Database Seeding
+  // 12. Indian & Tamil Nadu Food Database Seeding
   const foods = [
     { name: 'Idli (2 pieces)', category: 'MEALS', servingSize: 100, servingUnit: 'piece', calories: 130, proteinGrams: 4.2, carbGrams: 28, fatGrams: 0.4, fibreGrams: 2.5, isIndianTraditional: true, region: 'Tamil Nadu' },
     { name: 'Plain Dosa', category: 'MEALS', servingSize: 100, servingUnit: 'piece', calories: 168, proteinGrams: 3.8, carbGrams: 29, fatGrams: 3.7, fibreGrams: 1.2, isIndianTraditional: true, region: 'Tamil Nadu' },

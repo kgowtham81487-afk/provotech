@@ -84,7 +84,7 @@ model User {
   moderationActions ModerationAction[]
   auditLogs         AuditLog[]
   blogs             Blog[]
-  aiConversations   AIConversation[]
+  conversations     Conversation[] @relation("UserConversations")
 
   @@index([email])
   @@index([status])
@@ -181,7 +181,7 @@ model PasswordResetToken {
 }
 
 // ==========================================
-// 2. EVOLVE — FIELDS, SKILLS & WORKSPACES
+// 2. EVOLVE â€” FIELDS, SKILLS & WORKSPACES
 // ==========================================
 
 model Field {
@@ -689,7 +689,7 @@ model ContentDraft {
 }
 
 // ==========================================
-// 3. ENGAGE — SOCIAL NETWORK & COLLABORATION
+// 3. ENGAGE â€” SOCIAL NETWORK & COLLABORATION
 // ==========================================
 
 model Post {
@@ -821,11 +821,19 @@ model CommunityMember {
 
 model Conversation {
   id           String                    @id @default(uuid())
+  userId       String?
+  user         User?                     @relation("UserConversations", fields: [userId], references: [id], onDelete: Cascade)
+  title        String                    @default("New Conversation")
+  module       String                    @default("GENERAL") // SKILLS, OPPORTUNITIES, EVOLVE, DASHBOARD, FITNESS, GENERAL
+  isArchived   Boolean                   @default(false)
   isGroup      Boolean                   @default(false)
   participants ConversationParticipant[]
   messages     Message[]
   updatedAt    DateTime                  @updatedAt
   createdAt    DateTime                  @default(now())
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@index([module])
 }
 
 model ConversationParticipant {
@@ -843,15 +851,23 @@ model ConversationParticipant {
 }
 
 model Message {
-  id             String       @id @default(uuid())
-  conversationId String
-  senderId       String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender         User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
-  content        String       @db.Text
-  createdAt      DateTime     @default(now())
+  id               String       @id @default(uuid())
+  conversationId   String
+  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId         String?
+  sender           User?        @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  role             String       @default("user") // user, assistant, system
+  content          String       @db.Text
+  provider         String?      // gemini, deepseek, groq, fallback
+  model            String?
+  promptTokens     Int?
+  completionTokens Int?
+  totalTokens      Int?
+  latencyMs        Int?
+  metadata         Json?
+  createdAt        DateTime     @default(now())
 
-  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([conversationId, createdAt(sort: Asc)])
   @@index([senderId])
 }
 
@@ -885,7 +901,7 @@ model Report {
 }
 
 // ==========================================
-// 4. SCALE — OPPORTUNITY & VALUE ECOSYSTEM
+// 4. SCALE â€” OPPORTUNITY & VALUE ECOSYSTEM
 // ==========================================
 
 enum OpportunityType {
@@ -1243,41 +1259,8 @@ model PlatformConfig {
 
 
 // ==========================================
-// 12. AI CONVERSATIONS & PROVIDER CONTROLS
+// 12. AI PROVIDER CONTROLS & RESILIENCY
 // ==========================================
-
-model AIConversation {
-  id          String        @id @default(uuid())
-  userId      String
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title       String        @default("New Conversation")
-  module      String        @default("GENERAL") // SKILLS, OPPORTUNITIES, EVOLVE, DASHBOARD, GENERAL
-  isArchived  Boolean       @default(false)
-  messages    AIMessage[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-
-  @@index([userId, updatedAt(sort: Desc)])
-  @@index([module])
-}
-
-model AIMessage {
-  id               String         @id @default(uuid())
-  conversationId   String
-  conversation     AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  role             String         // user, assistant, system
-  content          String         @db.Text
-  provider         String?        // gemini, deepseek, groq, fallback
-  model            String?
-  promptTokens     Int?
-  completionTokens Int?
-  totalTokens      Int?
-  latencyMs        Int?
-  metadata         Json?
-  createdAt        DateTime       @default(now())
-
-  @@index([conversationId, createdAt(sort: Asc)])
-}
 
 model AIProviderConfiguration {
   id          String   @id @default(uuid())
@@ -1290,6 +1273,8 @@ model AIProviderConfiguration {
   timeoutMs   Int      @default(30000)
   maxTokens   Int      @default(2048)
   temperature Float    @default(0.7)
+  metadata    Json?
+  createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
@@ -1305,5 +1290,6 @@ model AIProviderHealth {
   lastSuccessAt      DateTime?
   lastFailureAt      DateTime?
   lastErrorMessage   String?   @db.Text
+  createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 }

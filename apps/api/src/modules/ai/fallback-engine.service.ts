@@ -1,4 +1,5 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { AIProviderHealth, AIProviderConfiguration } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { GeminiProvider } from './providers/gemini.provider';
 import { DeepSeekProvider } from './providers/deepseek.provider';
@@ -371,11 +372,11 @@ export class FallbackEngineService {
     successfulAiRequests: number;
     failedAiRequests: number;
   }> {
-    const configs = await this.getEffectiveProviderChain();
-    const healthRecords = await this.prisma.aIProviderHealth.findMany();
+    const configs: AIProviderConfiguration[] = await this.getEffectiveProviderChain();
+    const healthRecords: AIProviderHealth[] = await this.prisma.aIProviderHealth.findMany();
     const fallbackEnabled = await this.isFallbackEnabled();
 
-    const healthMap = new Map(healthRecords.map((h) => [h.provider, h]));
+    const healthMap = new Map<string, AIProviderHealth>(healthRecords.map((h) => [h.provider, h]));
 
     let totalAiRequests = 0;
     let successfulAiRequests = 0;

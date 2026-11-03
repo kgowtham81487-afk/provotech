@@ -30,7 +30,7 @@ export class AiService {
    * Retrieves all active conversations for the authenticated user (isolated strictly by userId).
    */
   async listConversations(userId: string) {
-    const conversations = await this.prisma.aIConversation.findMany({
+    const conversations = await this.prisma.conversation.findMany({
       where: { userId, isArchived: false },
       orderBy: { updatedAt: 'desc' },
       include: {
@@ -60,7 +60,7 @@ export class AiService {
    * Retrieves a specific conversation with all its messages, guaranteeing user isolation.
    */
   async getConversation(userId: string, conversationId: string) {
-    const conversation = await this.prisma.aIConversation.findFirst({
+    const conversation = await this.prisma.conversation.findFirst({
       where: { id: conversationId, userId },
       include: {
         messages: {
@@ -80,7 +80,7 @@ export class AiService {
    * Creates a new conversation for the authenticated user.
    */
   async createConversation(userId: string, title?: string, module?: string) {
-    return this.prisma.aIConversation.create({
+    return this.prisma.conversation.create({
       data: {
         userId,
         title: title?.trim() || 'New Conversation',
@@ -93,7 +93,7 @@ export class AiService {
    * Renames a conversation, verifying ownership.
    */
   async renameConversation(userId: string, conversationId: string, newTitle: string) {
-    const conversation = await this.prisma.aIConversation.findFirst({
+    const conversation = await this.prisma.conversation.findFirst({
       where: { id: conversationId, userId },
     });
 
@@ -101,7 +101,7 @@ export class AiService {
       throw new NotFoundException('Conversation not found or access denied.');
     }
 
-    return this.prisma.aIConversation.update({
+    return this.prisma.conversation.update({
       where: { id: conversationId },
       data: { title: newTitle.trim().slice(0, 100) || 'Untitled' },
     });
@@ -111,7 +111,7 @@ export class AiService {
    * Deletes a conversation and all its messages.
    */
   async deleteConversation(userId: string, conversationId: string) {
-    const conversation = await this.prisma.aIConversation.findFirst({
+    const conversation = await this.prisma.conversation.findFirst({
       where: { id: conversationId, userId },
     });
 
@@ -119,7 +119,7 @@ export class AiService {
       throw new NotFoundException('Conversation not found or access denied.');
     }
 
-    await this.prisma.aIConversation.delete({
+    await this.prisma.conversation.delete({
       where: { id: conversationId },
     });
 
@@ -139,7 +139,7 @@ export class AiService {
 
     // 1. Resolve or create conversation
     if (input.conversationId && input.conversationId !== 'new') {
-      conversation = await this.prisma.aIConversation.findFirst({
+      conversation = await this.prisma.conversation.findFirst({
         where: { id: input.conversationId, userId },
       });
       if (!conversation) {
@@ -147,7 +147,7 @@ export class AiService {
       }
     } else {
       const generatedTitle = this.generateTitleFromPrompt(cleanContent);
-      conversation = await this.prisma.aIConversation.create({
+      conversation = await this.prisma.conversation.create({
         data: {
           userId,
           title: generatedTitle,
@@ -157,16 +157,17 @@ export class AiService {
     }
 
     // 2. Persist user message
-    const userMessage = await this.prisma.aIMessage.create({
+    const userMessage = await this.prisma.message.create({
       data: {
         conversationId: conversation.id,
+        senderId: userId,
         role: 'user',
         content: cleanContent,
       },
     });
 
     // 3. Fetch rolling historical conversation messages (last 10 for context window)
-    const history = await this.prisma.aIMessage.findMany({
+    const history = await this.prisma.message.findMany({
       where: { conversationId: conversation.id, id: { not: userMessage.id } },
       orderBy: { createdAt: 'desc' },
       take: 10,
@@ -193,7 +194,7 @@ export class AiService {
     const { result, fallbackOccurred, attempts } = await this.fallbackEngine.executeWithFallback(formattedMessages);
 
     // 7. Persist assistant response
-    const assistantMessage = await this.prisma.aIMessage.create({
+    const assistantMessage = await this.prisma.message.create({
       data: {
         conversationId: conversation.id,
         role: 'assistant',
@@ -214,13 +215,13 @@ export class AiService {
     // 8. Auto-update title if initial conversation had default title
     if (conversation.title === 'New Conversation') {
       const newTitle = this.generateTitleFromPrompt(cleanContent);
-      await this.prisma.aIConversation.update({
+      await this.prisma.conversation.update({
         where: { id: conversation.id },
         data: { title: newTitle, updatedAt: new Date() },
       });
       conversation.title = newTitle;
     } else {
-      await this.prisma.aIConversation.update({
+      await this.prisma.conversation.update({
         where: { id: conversation.id },
         data: { updatedAt: new Date() },
       });
